@@ -69,6 +69,12 @@ def _normalize_download_url(url):
     if parsed.netloc.lower() == "github.com" and "/blob/" in parsed.path:
         owner_repo, path_part = parsed.path.lstrip("/").split("/blob/", 1)
         return f"https://raw.githubusercontent.com/{owner_repo}/{path_part}"
+    if parsed.netloc.lower() == "github.com":
+        parts = [part for part in parsed.path.strip("/").split("/") if part]
+        if len(parts) == 2:
+            owner, repo = parts
+            repo = repo.removesuffix(".git")
+            return f"https://raw.githubusercontent.com/{owner}/{repo}/main/README.md"
     return url
 
 

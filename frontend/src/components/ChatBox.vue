@@ -2,8 +2,8 @@
   <div class="chat-box">
     <header>
       <div>
-        <h1>LunaClaw 陪伴 Agent</h1>
-        <p>两阶段 LLM 决策、语义记忆、工具调用与可解释自我优化</p>
+        <h1>LunaClaw Agent</h1>
+        <p>Planner, tools, sources, memory, Skills, and self-evolution in one loop.</p>
       </div>
     </header>
     <MessageList :messages="messages" :loading="loading" />

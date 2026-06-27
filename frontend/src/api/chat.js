@@ -52,6 +52,17 @@ export function fetchEvolutionSkills() {
   return request('/evolution/skills')
 }
 
+export function fetchSkills() {
+  return request('/skills')
+}
+
+export function installSkill(payload) {
+  return request('/skills/install', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+}
+
 export function rollbackEvolution(operationId) {
   return request(`/evolution/rollback/${operationId}`, { method: 'POST' })
 }

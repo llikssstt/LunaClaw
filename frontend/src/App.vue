@@ -22,6 +22,12 @@
         @create="handleCreateMemory"
       />
       <TodoPanel :items="todos" @refresh="loadPanels" />
+      <SkillManagerPanel
+        :skills="installedSkills"
+        :installing="skillInstalling"
+        @refresh="loadPanels"
+        @install="handleInstallSkill"
+      />
     </aside>
   </main>
 </template>
@@ -34,31 +40,42 @@ import {
   fetchEvolutionLogs,
   fetchEvolutionSkills,
   fetchMemory,
+  fetchSkills,
   fetchTodos,
+  installSkill,
   rollbackEvolution,
   sendChat
 } from './api/chat'
 import ChatBox from './components/ChatBox.vue'
 import EvolutionPanel from './components/EvolutionPanel.vue'
 import MemoryPanel from './components/MemoryPanel.vue'
+import SkillManagerPanel from './components/SkillManagerPanel.vue'
 import StatusPanel from './components/StatusPanel.vue'
 import TodoPanel from './components/TodoPanel.vue'
+
+const emptyArtifacts = () => ({
+  retrieved_memories: [],
+  evolution_events: [],
+  active_skills: [],
+  sources: [],
+  tool_trace: [],
+  evolution_summary: ''
+})
 
 const messages = ref([
   {
     role: 'assistant',
-    content: '我是 LunaClaw，网页里的常驻陪伴 Agent。你可以先问我是谁，或者让我帮你安排今晚两小时。',
-    retrieved_memories: [],
-    evolution_events: [],
-    active_skills: [],
-    evolution_summary: ''
+    content: 'I am LunaClaw. Ask me to search, fetch sources, use tools, load Skills, or install a Skill from a URL.',
+    ...emptyArtifacts()
   }
 ])
 const memories = ref([])
 const todos = ref([])
 const evolutionLogs = ref([])
 const evolutionSkills = ref([])
+const installedSkills = ref([])
 const loading = ref(false)
+const skillInstalling = ref(false)
 const status = reactive({
   emotion: 'neutral',
   tool_used: 'none',
@@ -69,7 +86,7 @@ const status = reactive({
 })
 
 async function handleSend(text) {
-  messages.value.push({ role: 'user', content: text, retrieved_memories: [], evolution_events: [], active_skills: [], evolution_summary: '' })
+  messages.value.push({ role: 'user', content: text, ...emptyArtifacts() })
   loading.value = true
   try {
     const result = await sendChat(text)
@@ -79,6 +96,8 @@ async function handleSend(text) {
       retrieved_memories: result.retrieved_memories || [],
       evolution_events: result.evolution_events || [],
       active_skills: result.active_skills || [],
+      sources: result.sources || [],
+      tool_trace: result.tool_trace || [],
       evolution_summary: result.evolution_summary || ''
     })
     Object.assign(status, {
@@ -90,11 +109,8 @@ async function handleSend(text) {
   } catch (error) {
     messages.value.push({
       role: 'assistant',
-      content: '后端暂时没接上。先确认 FastAPI 是否在 http://127.0.0.1:8000 运行。',
-      retrieved_memories: [],
-      evolution_events: [],
-      active_skills: [],
-      evolution_summary: ''
+      content: 'Backend is not reachable. Confirm FastAPI is running at http://127.0.0.1:8000.',
+      ...emptyArtifacts()
     })
     Object.assign(status, {
       emotion: 'thinking',
@@ -111,21 +127,24 @@ async function handleSend(text) {
 
 async function loadPanels() {
   try {
-    const [memoryData, todoData, logData, skillData] = await Promise.all([
+    const [memoryData, todoData, logData, evolutionSkillData, installedSkillData] = await Promise.all([
       fetchMemory(),
       fetchTodos(),
       fetchEvolutionLogs(),
-      fetchEvolutionSkills()
+      fetchEvolutionSkills(),
+      fetchSkills()
     ])
     memories.value = memoryData
     todos.value = todoData
     evolutionLogs.value = logData
-    evolutionSkills.value = skillData
+    evolutionSkills.value = evolutionSkillData
+    installedSkills.value = installedSkillData.skills || []
   } catch {
     memories.value = memories.value
     todos.value = todos.value
     evolutionLogs.value = evolutionLogs.value
     evolutionSkills.value = evolutionSkills.value
+    installedSkills.value = installedSkills.value
   }
 }
 
@@ -142,6 +161,19 @@ async function handleCreateMemory(payload) {
 async function handleRollbackEvolution(operationId) {
   await rollbackEvolution(operationId)
   await loadPanels()
+}
+
+async function handleInstallSkill(payload) {
+  skillInstalling.value = true
+  try {
+    const result = await installSkill({ url: payload.url, skill_id: payload.skill_id })
+    payload.onSuccess?.(result)
+    await loadPanels()
+  } catch (error) {
+    payload.onError?.(error)
+  } finally {
+    skillInstalling.value = false
+  }
 }
 
 onMounted(loadPanels)
