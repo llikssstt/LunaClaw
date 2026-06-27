@@ -6,6 +6,11 @@ triggers:
   - code review
   - pull request
   - bug
+  - 代码审查
+  - 代码 review
+  - PR
+  - 漏洞
+  - 回归
 ---
 
 # Code Review

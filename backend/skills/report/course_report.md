@@ -7,6 +7,10 @@ triggers:
   - experiment report
   - 课程报告
   - 实验报告
+  - 项目报告
+  - 报告格式
+  - 课程报告
+  - 实验报告
 ---
 
 # Course Report

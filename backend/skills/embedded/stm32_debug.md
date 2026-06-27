@@ -8,6 +8,12 @@ triggers:
   - interrupt
   - UART
   - ADC
+  - 单片机
+  - 嵌入式
+  - 中断
+  - 串口
+  - 定时器
+  - 调试
 ---
 
 # STM32 Debug

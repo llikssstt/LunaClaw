@@ -3,6 +3,7 @@ from typing import Callable, Dict
 
 from tools.calculator_tool import calculate
 from tools.study_plan_tool import generate_study_plan
+from tools.skill_installer_tool import install_skill, list_skills
 from tools.time_tool import get_current_time
 from tools.todo_tool import run_todo
 from tools.web_tools import web_fetch, web_search
@@ -43,6 +44,14 @@ def _web_fetch_handler(args):
     return web_fetch(args.get("url", ""), max_chars=args.get("max_chars", 8000))
 
 
+def _install_skill_handler(args):
+    return install_skill(args.get("url", ""), skill_id=args.get("skill_id"))
+
+
+def _list_skills_handler(args):
+    return list_skills()
+
+
 TOOL_REGISTRY: Dict[str, ToolSpec] = {
     "time": ToolSpec("time", "获取当前时间", {}, _time_handler),
     "calculator": ToolSpec("calculator", "计算简单四则运算表达式", {"expression": "表达式"}, _calculator_handler),
@@ -51,6 +60,23 @@ TOOL_REGISTRY: Dict[str, ToolSpec] = {
     "web_search": ToolSpec("web_search", "搜索最新网页信息", {"query": "搜索关键词", "max_results": 5}, _web_search_handler),
     "web_fetch": ToolSpec("web_fetch", "读取指定网页正文", {"url": "网页 URL", "max_chars": 8000}, _web_fetch_handler),
 }
+
+TOOL_REGISTRY.update(
+    {
+        "install_skill": ToolSpec(
+            "install_skill",
+            "Install a markdown Skill from an HTTP(S) URL",
+            {"url": "Markdown Skill URL", "skill_id": "Optional local skill id"},
+            _install_skill_handler,
+        ),
+        "list_skills": ToolSpec(
+            "list_skills",
+            "List installed static, imported, and generated Skills",
+            {},
+            _list_skills_handler,
+        ),
+    }
+)
 
 AVAILABLE_TOOLS = [tool.public_schema() for tool in TOOL_REGISTRY.values()]
 

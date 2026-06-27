@@ -7,6 +7,12 @@ triggers:
   - GitHub
   - version
   - policy
+  - 最新
+  - 新闻
+  - 联网搜索
+  - 查资料
+  - 版本
+  - 政策
 ---
 
 # Web Research

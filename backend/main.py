@@ -7,6 +7,7 @@ from agent.agent_core import AgentCore
 from agent.memory_core import MemoryCore
 from agent.memory import MemoryStore
 from agent.self_evolution import SelfEvolutionCore
+from tools.skill_installer_tool import install_skill, list_skills as list_installed_skills
 from tools.todo_tool import TodoStore
 
 
@@ -38,6 +39,11 @@ class MemoryUpdateRequest(BaseModel):
     category: Optional[str] = None
     importance: Optional[float] = None
     status: Optional[str] = None
+
+
+class SkillInstallRequest(BaseModel):
+    url: str
+    skill_id: Optional[str] = None
 
 
 @app.get("/health")
@@ -119,6 +125,19 @@ def rollback_evolution(operation_id: str):
         raise HTTPException(status_code=404, detail="evolution operation not found")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/skills")
+def skills():
+    return list_installed_skills()
+
+
+@app.post("/skills/install")
+def install_skill_endpoint(request: SkillInstallRequest):
+    result = install_skill(request.url, request.skill_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
 
 
 @app.get("/todos")
