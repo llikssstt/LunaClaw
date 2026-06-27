@@ -27,6 +27,10 @@
         :installing="skillInstalling"
         @refresh="loadPanels"
         @install="handleInstallSkill"
+        @view="handleViewSkill"
+        @enable="handleEnableSkill"
+        @disable="handleDisableSkill"
+        @delete="handleDeleteSkill"
       />
     </aside>
   </main>
@@ -37,12 +41,16 @@ import { onMounted, reactive, ref } from 'vue'
 import {
   createMemory,
   deleteMemory,
+  deleteSkill,
+  disableSkill,
+  enableSkill,
   fetchEvolutionLogs,
   fetchEvolutionSkills,
   fetchMemory,
   fetchSkills,
   fetchTodos,
   installSkill,
+  readSkill,
   rollbackEvolution,
   sendChat
 } from './api/chat'
@@ -173,6 +181,45 @@ async function handleInstallSkill(payload) {
     payload.onError?.(error)
   } finally {
     skillInstalling.value = false
+  }
+}
+
+async function handleViewSkill(payload) {
+  try {
+    const result = await readSkill(payload.skill_id)
+    payload.onSuccess?.(result.skill || result)
+  } catch (error) {
+    payload.onError?.(error)
+  }
+}
+
+async function handleEnableSkill(payload) {
+  try {
+    await enableSkill(payload.skill_id)
+    payload.onSuccess?.()
+    await loadPanels()
+  } catch (error) {
+    payload.onError?.(error)
+  }
+}
+
+async function handleDisableSkill(payload) {
+  try {
+    await disableSkill(payload.skill_id)
+    payload.onSuccess?.()
+    await loadPanels()
+  } catch (error) {
+    payload.onError?.(error)
+  }
+}
+
+async function handleDeleteSkill(payload) {
+  try {
+    await deleteSkill(payload.skill_id)
+    payload.onSuccess?.()
+    await loadPanels()
+  } catch (error) {
+    payload.onError?.(error)
   }
 }
 

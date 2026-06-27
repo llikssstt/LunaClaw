@@ -53,15 +53,19 @@ class SkillRegistry:
     def _load_skill(self, path):
         text = path.read_text(encoding="utf-8")
         meta, body = self._split_frontmatter(text)
-        name = meta.get("name") or meta.get("skill_id") or path.stem
+        if not meta and path.name.lower() != "skill.md":
+            return None
+        default_id = path.parent.name if path.name.lower() == "skill.md" else path.stem
+        name = meta.get("name") or meta.get("skill_id") or default_id
         triggers = self._list_value(meta.get("triggers"))
         trigger_examples = self._list_value(meta.get("trigger_examples"))
         if not triggers:
             triggers = self._extract_inline_list(body, "Triggers")
         if not trigger_examples:
             trigger_examples = self._extract_inline_list(body, "Trigger Examples")
+        root_dir = path.parent if path.name.lower() == "skill.md" else path.parent
         return {
-            "skill_id": meta.get("skill_id") or path.stem,
+            "skill_id": meta.get("skill_id") or default_id,
             "name": name,
             "description": meta.get("description", ""),
             "scenario": meta.get("scenario", ""),
@@ -69,6 +73,8 @@ class SkillRegistry:
             "triggers": triggers,
             "trigger_examples": trigger_examples,
             "path": str(path),
+            "root_dir": str(root_dir),
+            "resources": self._resources(root_dir, path),
             "summary": self._summary(body),
             "instructions": self._instructions(body),
         }
@@ -128,3 +134,13 @@ class SkillRegistry:
             if len(" ".join(lines)) >= 400:
                 break
         return "\n".join(lines)[:600]
+
+    def _resources(self, root_dir, skill_path):
+        if not root_dir.exists() or not root_dir.is_dir():
+            return []
+        resources = []
+        for path in sorted(root_dir.rglob("*")):
+            if not path.is_file() or path == skill_path:
+                continue
+            resources.append(path.relative_to(root_dir).as_posix())
+        return resources

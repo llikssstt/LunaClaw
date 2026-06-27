@@ -63,6 +63,22 @@ export function installSkill(payload) {
   })
 }
 
+export function readSkill(skillId) {
+  return request(`/skills/${encodeURIComponent(skillId)}`)
+}
+
+export function enableSkill(skillId) {
+  return request(`/skills/${encodeURIComponent(skillId)}/enable`, { method: 'POST' })
+}
+
+export function disableSkill(skillId) {
+  return request(`/skills/${encodeURIComponent(skillId)}/disable`, { method: 'POST' })
+}
+
+export function deleteSkill(skillId) {
+  return request(`/skills/${encodeURIComponent(skillId)}`, { method: 'DELETE' })
+}
+
 export function rollbackEvolution(operationId) {
   return request(`/evolution/rollback/${operationId}`, { method: 'POST' })
 }

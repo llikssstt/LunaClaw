@@ -7,7 +7,14 @@ from agent.agent_core import AgentCore
 from agent.memory_core import MemoryCore
 from agent.memory import MemoryStore
 from agent.self_evolution import SelfEvolutionCore
-from tools.skill_installer_tool import install_skill, list_skills as list_installed_skills
+from tools.skill_installer_tool import (
+    delete_skill,
+    disable_skill,
+    enable_skill,
+    install_skill,
+    list_skills as list_installed_skills,
+    read_skill,
+)
 from tools.todo_tool import TodoStore
 
 
@@ -138,6 +145,45 @@ def install_skill_endpoint(request: SkillInstallRequest):
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result["error"])
     return result
+
+
+@app.get("/skills/{skill_id}")
+def skill_detail(skill_id: str):
+    result = read_skill(skill_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=_skill_error_status(result), detail=result["error"])
+    return result
+
+
+@app.post("/skills/{skill_id}/enable")
+def enable_skill_endpoint(skill_id: str):
+    result = enable_skill(skill_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=_skill_error_status(result), detail=result["error"])
+    return result
+
+
+@app.post("/skills/{skill_id}/disable")
+def disable_skill_endpoint(skill_id: str):
+    result = disable_skill(skill_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=_skill_error_status(result), detail=result["error"])
+    return result
+
+
+@app.delete("/skills/{skill_id}")
+def delete_skill_endpoint(skill_id: str):
+    result = delete_skill(skill_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=_skill_error_status(result), detail=result["error"])
+    return result
+
+
+def _skill_error_status(result):
+    code = (result.get("error") or {}).get("code")
+    if code == "skill_not_found":
+        return 404
+    return 400
 
 
 @app.get("/todos")

@@ -9,8 +9,9 @@ export default defineConfig({
       '/chat': 'http://127.0.0.1:8000',
       '/health': 'http://127.0.0.1:8000',
       '/memory': 'http://127.0.0.1:8000',
+      '/skills': 'http://127.0.0.1:8000',
+      '/evolution': 'http://127.0.0.1:8000',
       '/todos': 'http://127.0.0.1:8000'
     }
   }
 })
-
