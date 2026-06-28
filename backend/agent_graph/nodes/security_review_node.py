@@ -11,13 +11,16 @@ def security_review_node(state):
     tool_id = selected.get("tool_id")
     manifest = load_manifest(Path(DEMO_TOOLS_DIR) / tool_id / "manifest.json")
     review = review_manifest(manifest)
-    approval = create_install_approval(tool_id, selected.get("install_source", "demo"), selected.get("source_url"), review)
     state["security_review"] = review
     state["approval_required"] = review["approval_required"]
-    state["approval_id"] = approval["approval_id"]
-    state["route"] = "response"
+    if review["approval_required"]:
+        approval = create_install_approval(tool_id, selected.get("install_source", "demo"), selected.get("source_url"), review)
+        state["approval_id"] = approval["approval_id"]
+        state["route"] = "response"
+    else:
+        state["approval_id"] = None
+        state["route"] = "tool_install"
     state.setdefault("agent_flow", []).append(
         flow_step("Security Review Agent", "review_manifest", reason=f"{tool_id} risk={review['risk_level']}")
     )
     return state
-

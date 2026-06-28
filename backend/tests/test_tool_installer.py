@@ -53,6 +53,7 @@ def test_approval_installs_demo_tool_and_lists_it(monkeypatch):
     installed = ToolManager().list_installed_tools()
     assert installed[0]["tool_id"] == "web_reader"
     assert installed[0]["enabled"] is True
+    assert [step["agent_name"] for step in result["agent_flow"]] == ["User Approval", "Tool Install Agent"]
 
 
 def test_installed_web_reader_executes_and_writes_result(monkeypatch):
@@ -67,3 +68,16 @@ def test_installed_web_reader_executes_and_writes_result(monkeypatch):
     assert result["ok"] is True
     assert result["tool"] == "web_reader.fetch_page"
     assert result["result"]["title"] == "Example"
+
+
+def test_internal_tool_ok_false_propagates_to_outer_error(monkeypatch):
+    tmp_path = local_tmp_path()
+    isolate_tool_storage(monkeypatch, tmp_path)
+    pending = install_tool("web_reader", "market")
+    approve_install(pending["approval_id"], True)
+
+    result = run_installed_tool("web_reader", "missing_tool", {"url": "https://example.com"})
+
+    assert result["ok"] is False
+    assert result["tool"] == "web_reader.missing_tool"
+    assert result["error"]["code"] == "unknown_tool"

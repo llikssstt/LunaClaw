@@ -23,6 +23,14 @@ def run_installed_tool(tool_id, tool_name, arguments):
         result = module.run(tool_name, arguments or {})
     except Exception as exc:
         return _error(tool_id, "execution_failed", str(exc))
+    if isinstance(result, dict) and result.get("ok") is False:
+        return {
+            "ok": False,
+            "tool": f"{tool_id}.{tool_name}",
+            "error": result.get("error") or {"code": "tool_returned_error", "message": "tool returned ok=false"},
+            "result": result,
+            "elapsed_ms": int((time.time() - started) * 1000),
+        }
     text = str(result)
     if len(text) > MAX_OUTPUT_CHARS:
         result = {"truncated": True, "content": text[:MAX_OUTPUT_CHARS]}
@@ -38,4 +46,3 @@ def _load_tool_module(path, tool_id):
 
 def _error(tool, code, message):
     return {"ok": False, "tool": tool, "error": {"code": code, "message": message}}
-

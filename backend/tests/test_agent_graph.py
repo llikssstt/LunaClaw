@@ -2,6 +2,7 @@ import uuid
 from pathlib import Path
 
 from agent_graph.graph import GraphCore
+from agent_graph import uploads
 from tool_system import installer, registry_store
 from tool_system.installer import approve_install, install_tool
 
@@ -25,19 +26,22 @@ class FakeResponse:
         return None
 
 
-def test_graph_chat_returns_compatible_fields():
-    result = GraphCore().chat("hello", "test")
+def test_graph_chat_returns_compatible_fields_and_uses_langgraph():
+    core = GraphCore()
+    result = core.chat("hello", "test")
 
     for key in ["reply", "emotion", "tool_used", "tool_trace", "sources", "agent_flow", "active_skills"]:
         assert key in result
     assert result["agent_flow"][0]["agent_name"] == "Supervisor Agent"
+    assert hasattr(core.graph, "invoke")
+    assert core.graph.__class__.__name__ == "CompiledStateGraph"
 
 
 def test_install_request_routes_to_tool_search_and_security(monkeypatch):
     tmp_path = local_tmp_path()
     isolate_tool_storage(monkeypatch, tmp_path)
 
-    result = GraphCore().chat("帮我安装一个能读取网页内容的工具", "test")
+    result = GraphCore().chat("install a tool that can read web pages", "test")
 
     assert result["approval_required"] is True
     assert result["approval_id"].startswith("approval_")
@@ -52,23 +56,34 @@ def test_installed_tool_execution_adds_tool_trace(monkeypatch):
     approve_install(pending["approval_id"], True)
     monkeypatch.setattr("requests.get", lambda *args, **kwargs: FakeResponse())
 
-    result = GraphCore().chat("用 web_reader 总结这个网页：https://example.com", "test")
+    result = GraphCore().chat("use web_reader to summarize this page: https://example.com", "test")
 
     assert result["tool_used"] == "web_reader.fetch_page"
     assert result["tool_trace"][0]["tool_call"]["name"] == "web_reader.fetch_page"
     assert result["sources"][0]["url"] == "https://example.com"
 
 
-def test_image_attachment_goes_through_multimodal_node():
+def test_image_attachment_goes_through_multimodal_node(monkeypatch):
     tmp_path = local_tmp_path()
     image_path = tmp_path / "shot.png"
     image_path.write_bytes(b"fake image")
+    monkeypatch.setattr(uploads, "DEFAULT_UPLOADS_INDEX_PATH", tmp_path / "uploads_index.json")
+    uploads.register_upload(
+        {
+            "file_id": "img_1",
+            "filename": "shot.png",
+            "content_type": "image/png",
+            "size": image_path.stat().st_size,
+            "path": str(image_path),
+            "type": "image",
+        }
+    )
 
     result = GraphCore().chat(
-        "帮我分析这张图片里的内容",
+        "analyze this uploaded image",
         "test",
-        attachments=[{"type": "image", "file_id": "img_1", "filename": "shot.png", "path": str(image_path)}],
+        attachments=[{"type": "image", "file_id": "img_1", "filename": "shot.png"}],
     )
 
     assert any(step["agent_name"] == "Multimodal Agent" for step in result["agent_flow"])
-    assert "图片输入分析" in result["reply"]
+    assert "shot.png" in result["reply"]

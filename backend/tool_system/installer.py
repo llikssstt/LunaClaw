@@ -3,6 +3,7 @@ import shutil
 import uuid
 from pathlib import Path
 
+from agent_graph.nodes.common import flow_step
 from tool_system.manifest import load_manifest, manifest_sha256
 from tool_system.registry_store import ToolRegistryStore
 from tool_system.security import review_manifest
@@ -37,11 +38,24 @@ def approve_install(approval_id, approved):
     if not approved:
         approval["status"] = "rejected"
         _write_approvals(approvals)
-        return {"ok": True, "approved": False, "install_result": None}
+        return {
+            "ok": True,
+            "approved": False,
+            "install_result": None,
+            "agent_flow": [flow_step("User Approval", "reject_tool_install", status="rejected", reason=approval["tool_id"])],
+        }
     result = install_tool(approval["tool_id"], approval.get("source", "market"), approved=True, source_url=approval.get("source_url"))
     approval["status"] = "approved"
     _write_approvals(approvals)
-    return {"ok": True, "approved": True, **result}
+    return {
+        "ok": True,
+        "approved": True,
+        **result,
+        "agent_flow": [
+            flow_step("User Approval", "approve_tool_install", reason=approval["tool_id"]),
+            flow_step("Tool Install Agent", "install_tool", reason=approval["tool_id"]),
+        ],
+    }
 
 
 def create_install_approval(tool_id, source, source_url, review):
@@ -120,4 +134,3 @@ def _read_approvals():
 def _write_approvals(data):
     APPROVALS_PATH.parent.mkdir(parents=True, exist_ok=True)
     APPROVALS_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-

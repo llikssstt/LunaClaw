@@ -255,13 +255,15 @@ async function handleInstallTool(tool) {
 }
 
 async function handleApproveTool(approvalId) {
-  await approveTool(approvalId, true)
+  const result = await approveTool(approvalId, true)
+  if (result.agent_flow) agentFlow.value = result.agent_flow
   pendingApproval.value = null
   await loadPanels()
 }
 
 async function handleRejectTool(approvalId) {
-  await approveTool(approvalId, false)
+  const result = await approveTool(approvalId, false)
+  if (result.agent_flow) agentFlow.value = result.agent_flow
   pendingApproval.value = null
   await loadPanels()
 }

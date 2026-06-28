@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from agent.agent_core import AgentCore
 from agent_graph.graph import GraphCore
+from agent_graph.uploads import register_upload
 from agent.memory_core import MemoryCore
 from agent.memory import MemoryStore
 from agent.self_evolution import SelfEvolutionCore
@@ -168,13 +169,22 @@ def upload_image(file: UploadFile = File(...)):
     if len(data) > max_bytes:
         raise HTTPException(status_code=400, detail="image too large")
     path.write_bytes(data)
+    record = register_upload(
+        {
+            "file_id": file_id,
+            "filename": file.filename,
+            "content_type": content_type,
+            "size": len(data),
+            "path": str(path),
+            "type": "image",
+        }
+    )
     return {
         "ok": True,
-        "file_id": file_id,
-        "filename": file.filename,
-        "content_type": content_type,
-        "size": len(data),
-        "path": str(path),
+        "file_id": record["file_id"],
+        "filename": record["filename"],
+        "content_type": record["content_type"],
+        "size": record["size"],
         "type": "image",
     }
 
