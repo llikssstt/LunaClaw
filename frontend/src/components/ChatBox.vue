@@ -7,7 +7,7 @@
       </div>
     </header>
     <MessageList :messages="messages" :loading="loading" />
-    <InputBox :disabled="loading" @send="$emit('send', $event)" />
+    <InputBox :disabled="loading" @send="$emit('send', $event)" @upload-image="$emit('upload-image', $event)" />
   </div>
 </template>
 
@@ -20,5 +20,5 @@ defineProps({
   loading: { type: Boolean, default: false }
 })
 
-defineEmits(['send'])
+defineEmits(['send', 'upload-image'])
 </script>

@@ -1,0 +1,33 @@
+{
+  "tool_id": "web_reader",
+  "name": "Web Reader",
+  "version": "0.1.0",
+  "description": "Fetch a web page and extract readable text.",
+  "runtime": "python",
+  "entry": "tool_impl.py",
+  "transport": "local_function",
+  "permissions": {
+    "network": ["https"],
+    "filesystem": "none",
+    "shell": false,
+    "env": [],
+    "timeout_seconds": 10
+  },
+  "tools": [
+    {
+      "name": "fetch_page",
+      "description": "Fetch and extract text from a web page",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": ["url"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}
+

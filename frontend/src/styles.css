@@ -248,6 +248,33 @@ h3 {
   resize: vertical;
 }
 
+.input-actions {
+  align-items: stretch;
+  display: grid;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.input-actions small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.image-upload {
+  align-items: center;
+  background: #eef2f7;
+  border-radius: 8px;
+  color: #20242b;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  padding: 9px 12px;
+}
+
+.image-upload input {
+  display: none;
+}
+
 .panel {
   padding: 16px;
 }
@@ -370,6 +397,46 @@ h3 {
   overflow: auto;
   padding: 10px;
   white-space: pre-wrap;
+}
+
+.tool-store-panel pre,
+.permission-card pre {
+  background: #111827;
+  border-radius: 8px;
+  color: #e5e7eb;
+  font-size: 12px;
+  margin: 6px 0;
+  overflow-x: auto;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+
+.flow-list {
+  counter-reset: flow;
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+}
+
+.flow-list li,
+.permission-card {
+  background: #f8fafc;
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+}
+
+.flow-list li {
+  border-left: 3px solid #2563eb;
+}
+
+.flow-list p,
+.permission-card p {
+  color: #475569;
+  font-size: 13px;
 }
 
 .tag-row small {

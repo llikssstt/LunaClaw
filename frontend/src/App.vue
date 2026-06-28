@@ -5,10 +5,25 @@
     </section>
 
     <section class="workspace">
-      <ChatBox :messages="messages" :loading="loading" @send="handleSend" />
+      <ChatBox :messages="messages" :loading="loading" @send="handleSend" @upload-image="handleUploadImage" />
     </section>
 
     <aside class="side-panels">
+      <AgentFlowPanel :steps="agentFlow" />
+      <PermissionReviewPanel
+        :approval="pendingApproval"
+        @approve="handleApproveTool"
+        @reject="handleRejectTool"
+      />
+      <ToolStorePanel
+        :market="marketTools"
+        :installed="installedTools"
+        @refresh="loadPanels"
+        @search="handleSearchTools"
+        @install="handleInstallTool"
+        @enable="handleEnableTool"
+        @disable="handleDisableTool"
+      />
       <EvolutionPanel
         :logs="evolutionLogs"
         :skills="evolutionSkills"
@@ -43,25 +58,35 @@ import {
   createMemory,
   deleteMemory,
   deleteSkill,
+  disableTool,
   disableSkill,
+  enableTool,
   enableSkill,
+  approveTool,
+  fetchTools,
   fetchEvolutionLogs,
   fetchEvolutionSkills,
   fetchMemory,
   fetchSkills,
   fetchTodos,
   installSkill,
+  installTool,
   readSkill,
   readSkillResource,
   rollbackEvolution,
-  sendChat
+  searchTools,
+  sendChat,
+  uploadImage
 } from './api/chat'
+import AgentFlowPanel from './components/AgentFlowPanel.vue'
 import ChatBox from './components/ChatBox.vue'
 import EvolutionPanel from './components/EvolutionPanel.vue'
 import MemoryPanel from './components/MemoryPanel.vue'
+import PermissionReviewPanel from './components/PermissionReviewPanel.vue'
 import SkillManagerPanel from './components/SkillManagerPanel.vue'
 import StatusPanel from './components/StatusPanel.vue'
 import TodoPanel from './components/TodoPanel.vue'
+import ToolStorePanel from './components/ToolStorePanel.vue'
 
 const emptyArtifacts = () => ({
   retrieved_memories: [],
@@ -69,6 +94,7 @@ const emptyArtifacts = () => ({
   active_skills: [],
   sources: [],
   tool_trace: [],
+  agent_flow: [],
   evolution_summary: ''
 })
 
@@ -84,6 +110,10 @@ const todos = ref([])
 const evolutionLogs = ref([])
 const evolutionSkills = ref([])
 const installedSkills = ref([])
+const marketTools = ref([])
+const installedTools = ref([])
+const agentFlow = ref([])
+const pendingApproval = ref(null)
 const loading = ref(false)
 const skillInstalling = ref(false)
 const status = reactive({
@@ -95,11 +125,21 @@ const status = reactive({
   evolution_count: 0
 })
 
-async function handleSend(text) {
-  messages.value.push({ role: 'user', content: text, ...emptyArtifacts() })
+async function handleSend(payload) {
+  const message = typeof payload === 'string' ? payload : payload.message
+  const attachments = typeof payload === 'string' ? [] : payload.attachments || []
+  messages.value.push({ role: 'user', content: message, attachments, ...emptyArtifacts() })
   loading.value = true
   try {
-    const result = await sendChat(text)
+    const result = await sendChat(message, 'default', attachments)
+    agentFlow.value = result.agent_flow || []
+    if (result.approval_required) {
+      pendingApproval.value = {
+        approval_id: result.approval_id,
+        security_review: result.security_review,
+        tool: (result.candidate_tools || [])[0]
+      }
+    }
     messages.value.push({
       role: 'assistant',
       content: result.reply,
@@ -108,6 +148,7 @@ async function handleSend(text) {
       active_skills: result.active_skills || [],
       sources: result.sources || [],
       tool_trace: result.tool_trace || [],
+      agent_flow: result.agent_flow || [],
       evolution_summary: result.evolution_summary || ''
     })
     Object.assign(status, {
@@ -137,18 +178,21 @@ async function handleSend(text) {
 
 async function loadPanels() {
   try {
-    const [memoryData, todoData, logData, evolutionSkillData, installedSkillData] = await Promise.all([
+    const [memoryData, todoData, logData, evolutionSkillData, installedSkillData, toolData] = await Promise.all([
       fetchMemory(),
       fetchTodos(),
       fetchEvolutionLogs(),
       fetchEvolutionSkills(),
-      fetchSkills()
+      fetchSkills(),
+      fetchTools()
     ])
     memories.value = memoryData
     todos.value = todoData
     evolutionLogs.value = logData
     evolutionSkills.value = evolutionSkillData
     installedSkills.value = installedSkillData.skills || []
+    marketTools.value = toolData.market || []
+    installedTools.value = toolData.installed || []
   } catch {
     memories.value = memories.value
     todos.value = todos.value
@@ -156,6 +200,11 @@ async function loadPanels() {
     evolutionSkills.value = evolutionSkills.value
     installedSkills.value = installedSkills.value
   }
+}
+
+async function handleUploadImage(payload) {
+  const result = await uploadImage(payload.file)
+  payload.onSuccess?.(result)
 }
 
 async function handleDeleteMemory(memoryId) {
@@ -184,6 +233,47 @@ async function handleInstallSkill(payload) {
   } finally {
     skillInstalling.value = false
   }
+}
+
+async function handleSearchTools(query) {
+  const result = await searchTools(query)
+  marketTools.value = result.tools || []
+}
+
+async function handleInstallTool(tool) {
+  const result = await installTool({ tool_id: tool.tool_id, source: tool.install_source || tool.source || 'market' })
+  if (result.approval_required) {
+    pendingApproval.value = {
+      approval_id: result.approval_id,
+      security_review: result.security_review,
+      tool
+    }
+  } else {
+    pendingApproval.value = null
+    await loadPanels()
+  }
+}
+
+async function handleApproveTool(approvalId) {
+  await approveTool(approvalId, true)
+  pendingApproval.value = null
+  await loadPanels()
+}
+
+async function handleRejectTool(approvalId) {
+  await approveTool(approvalId, false)
+  pendingApproval.value = null
+  await loadPanels()
+}
+
+async function handleEnableTool(tool) {
+  await enableTool(tool.tool_id)
+  await loadPanels()
+}
+
+async function handleDisableTool(tool) {
+  await disableTool(tool.tool_id)
+  await loadPanels()
 }
 
 async function handleViewSkill(payload) {

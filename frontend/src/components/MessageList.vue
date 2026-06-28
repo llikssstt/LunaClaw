@@ -25,9 +25,20 @@
       </div>
 
       <div
-        v-if="hasSources(message) || hasToolTrace(message) || hasActiveSkills(message)"
+        v-if="hasSources(message) || hasToolTrace(message) || hasActiveSkills(message) || hasAgentFlow(message)"
         class="chat-artifacts"
       >
+        <details v-if="hasAgentFlow(message)">
+          <summary>Agent Flow</summary>
+          <ul class="artifact-list">
+            <li v-for="step in message.agent_flow" :key="step.timestamp || step.agent_name + step.action">
+              <strong>{{ step.agent_name }}</strong>
+              <small>{{ step.action }} / {{ step.status }}</small>
+              <p v-if="step.reason">{{ step.reason }}</p>
+            </li>
+          </ul>
+        </details>
+
         <details v-if="hasSources(message)">
           <summary>Sources</summary>
           <ul class="artifact-list">
@@ -88,6 +99,10 @@ function hasToolTrace(message) {
 
 function hasActiveSkills(message) {
   return Array.isArray(message.active_skills) && message.active_skills.length > 0
+}
+
+function hasAgentFlow(message) {
+  return Array.isArray(message.agent_flow) && message.agent_flow.length > 0
 }
 
 function formatJson(value) {

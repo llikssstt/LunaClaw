@@ -1,0 +1,20 @@
+{
+  "tools": [
+    {
+      "tool_id": "web_reader",
+      "name": "Web Reader",
+      "version": "0.1.0",
+      "description": "Fetch a web page and extract readable text.",
+      "source": "market",
+      "install_source": "demo",
+      "permissions": {
+        "network": ["https"],
+        "filesystem": "none",
+        "shell": false,
+        "env": [],
+        "timeout_seconds": 10
+      }
+    }
+  ]
+}
+

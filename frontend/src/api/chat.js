@@ -11,11 +11,19 @@ async function request(path, options = {}) {
   return response.json()
 }
 
-export function sendChat(message, sessionId = 'default') {
+export function sendChat(message, sessionId = 'default', attachments = []) {
   return request('/chat', {
     method: 'POST',
-    body: JSON.stringify({ message, session_id: sessionId })
+    body: JSON.stringify({ message, session_id: sessionId, attachments })
   })
+}
+
+export async function uploadImage(file) {
+  const form = new FormData()
+  form.append('file', file)
+  const response = await fetch(`${API_BASE}/uploads/image`, { method: 'POST', body: form })
+  if (!response.ok) throw new Error(await response.text())
+  return response.json()
 }
 
 export function fetchMemory() {
@@ -86,6 +94,39 @@ export function disableSkill(skillId) {
 
 export function deleteSkill(skillId) {
   return request(`/skills/${encodeURIComponent(skillId)}`, { method: 'DELETE' })
+}
+
+export function fetchTools() {
+  return request('/tools')
+}
+
+export function searchTools(query) {
+  return request('/tools/search', {
+    method: 'POST',
+    body: JSON.stringify({ query })
+  })
+}
+
+export function installTool(payload) {
+  return request('/tools/install', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+}
+
+export function approveTool(approvalId, approved) {
+  return request(`/tools/approve/${encodeURIComponent(approvalId)}`, {
+    method: 'POST',
+    body: JSON.stringify({ approved })
+  })
+}
+
+export function enableTool(toolId) {
+  return request(`/tools/${encodeURIComponent(toolId)}/enable`, { method: 'POST' })
+}
+
+export function disableTool(toolId) {
+  return request(`/tools/${encodeURIComponent(toolId)}/disable`, { method: 'POST' })
 }
 
 export function rollbackEvolution(operationId) {
