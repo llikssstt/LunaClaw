@@ -12,8 +12,10 @@ from tools.skill_installer_tool import (
     disable_skill,
     enable_skill,
     install_skill,
+    list_skill_resources,
     list_skills as list_installed_skills,
     read_skill,
+    read_skill_resource,
 )
 from tools.todo_tool import TodoStore
 
@@ -144,6 +146,22 @@ def install_skill_endpoint(request: SkillInstallRequest):
     result = install_skill(request.url, request.skill_id)
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
+@app.get("/skills/{skill_id}/resources")
+def skill_resources(skill_id: str):
+    result = list_skill_resources(skill_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=_skill_error_status(result), detail=result["error"])
+    return result
+
+
+@app.get("/skills/{skill_id}/resources/{resource_path:path}")
+def skill_resource(skill_id: str, resource_path: str, max_chars: int = 8000):
+    result = read_skill_resource(skill_id, resource_path, max_chars=max_chars)
+    if not result.get("ok") and (result.get("error") or {}).get("code") not in {"unsupported_binary"}:
+        raise HTTPException(status_code=_skill_error_status(result), detail=result["error"])
     return result
 
 

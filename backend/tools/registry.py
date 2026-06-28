@@ -3,7 +3,7 @@ from typing import Callable, Dict
 
 from tools.calculator_tool import calculate
 from tools.study_plan_tool import generate_study_plan
-from tools.skill_installer_tool import install_skill, install_skill_pack, list_skills
+from tools.skill_installer_tool import install_skill, install_skill_pack, list_skill_resources, list_skills, read_skill_resource
 from tools.time_tool import get_current_time
 from tools.todo_tool import run_todo
 from tools.web_tools import web_fetch, web_search
@@ -56,6 +56,14 @@ def _install_skill_pack_handler(args):
     return install_skill_pack(args.get("url", ""), pack_id=args.get("pack_id"))
 
 
+def _list_skill_resources_handler(args):
+    return list_skill_resources(args.get("skill_id", ""))
+
+
+def _read_skill_resource_handler(args):
+    return read_skill_resource(args.get("skill_id", ""), args.get("resource_path", ""), max_chars=args.get("max_chars", 8000))
+
+
 TOOL_REGISTRY: Dict[str, ToolSpec] = {
     "time": ToolSpec("time", "获取当前时间", {}, _time_handler),
     "calculator": ToolSpec("calculator", "计算简单四则运算表达式", {"expression": "表达式"}, _calculator_handler),
@@ -84,6 +92,18 @@ TOOL_REGISTRY.update(
             "Install a GitHub Skill pack recursively, preserving resources without executing scripts",
             {"url": "GitHub repository or directory URL", "pack_id": "Optional local pack id"},
             _install_skill_pack_handler,
+        ),
+        "list_skill_resources": ToolSpec(
+            "list_skill_resources",
+            "List resource paths available under a Skill pack root",
+            {"skill_id": "Skill id"},
+            _list_skill_resources_handler,
+        ),
+        "read_skill_resource": ToolSpec(
+            "read_skill_resource",
+            "Read a text resource from a Skill pack root without executing it",
+            {"skill_id": "Skill id", "resource_path": "Relative resource path", "max_chars": 8000},
+            _read_skill_resource_handler,
         ),
     }
 )

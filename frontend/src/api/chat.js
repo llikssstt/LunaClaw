@@ -67,6 +67,15 @@ export function readSkill(skillId) {
   return request(`/skills/${encodeURIComponent(skillId)}`)
 }
 
+export function fetchSkillResources(skillId) {
+  return request(`/skills/${encodeURIComponent(skillId)}/resources`)
+}
+
+export function readSkillResource(skillId, resourcePath, maxChars = 8000) {
+  const path = resourcePath.split('/').map(encodeURIComponent).join('/')
+  return request(`/skills/${encodeURIComponent(skillId)}/resources/${path}?max_chars=${maxChars}`)
+}
+
 export function enableSkill(skillId) {
   return request(`/skills/${encodeURIComponent(skillId)}/enable`, { method: 'POST' })
 }

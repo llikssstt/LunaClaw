@@ -32,10 +32,21 @@
         <summary>Resources</summary>
         <ul class="compact-list">
           <li v-for="resource in selectedSkill.resources || []" :key="resource">
-            <small>{{ resource }}</small>
+            <button class="resource-button" @click="handleReadResource(resource)">{{ resource }}</button>
           </li>
         </ul>
         <p v-if="!(selectedSkill.resources && selectedSkill.resources.length)" class="empty">No resources.</p>
+      </details>
+      <details v-if="selectedResource" open>
+        <summary>{{ selectedResource.resource_path || selectedResource.metadata?.path || 'Resource' }}</summary>
+        <p v-if="selectedResource.error" class="empty">
+          {{ selectedResource.error.code === 'unsupported_binary' ? 'Binary or unsupported resource. Metadata only.' : selectedResource.error.message }}
+        </p>
+        <pre v-else>{{ selectedResource.content }}</pre>
+        <small v-if="selectedResource.truncated">Content truncated.</small>
+        <small v-if="selectedResource.metadata">
+          {{ selectedResource.metadata.extension || 'file' }} · {{ selectedResource.metadata.size }} bytes
+        </small>
       </details>
     </article>
 
@@ -67,13 +78,14 @@ defineProps({
   installing: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['install', 'refresh', 'view', 'enable', 'disable', 'delete'])
+const emit = defineEmits(['install', 'refresh', 'view', 'enable', 'disable', 'delete', 'read-resource'])
 
 const url = ref('https://github.com/Yuan1z0825/nature-skills')
 const skillId = ref('nature_skills')
 const message = ref('')
 const hasError = ref(false)
 const selectedSkill = ref(null)
+const selectedResource = ref(null)
 
 function handleInstall() {
   message.value = ''
@@ -98,6 +110,21 @@ function handleView(skill) {
     skill_id: skill.skill_id,
     onSuccess: (result) => {
       selectedSkill.value = result
+      selectedResource.value = null
+      message.value = ''
+      hasError.value = false
+    },
+    onError: showError
+  })
+}
+
+function handleReadResource(resource) {
+  if (!selectedSkill.value?.skill_id) return
+  emit('read-resource', {
+    skill_id: selectedSkill.value.skill_id,
+    resource_path: resource,
+    onSuccess: (result) => {
+      selectedResource.value = result
       message.value = ''
       hasError.value = false
     },

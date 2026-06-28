@@ -44,6 +44,13 @@ class SkillRegistry:
             triggers = skill.get("triggers") or []
             if triggers:
                 lines.append("Triggers: " + ", ".join(triggers[:8]))
+            if skill.get("root_dir"):
+                lines.append(f"Root dir: {skill['root_dir']}")
+            resources = skill.get("resources") or []
+            if resources:
+                lines.append("Available resources:")
+                for resource in resources[:10]:
+                    lines.append(f"- {resource}")
             instructions = skill.get("instructions") or skill.get("summary") or ""
             if instructions:
                 lines.append("Instructions:")

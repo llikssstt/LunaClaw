@@ -14,6 +14,49 @@ from agent.skill_registry import DEFAULT_GENERATED_SKILLS_DIR, DEFAULT_STATIC_SK
 
 DEFAULT_IMPORTED_SKILLS_DIR = DEFAULT_STATIC_SKILLS_DIR / "imported"
 COMMON_SKILL_DIRS = ["skills", ".skills", "superpowers", "skill"]
+MAX_ZIP_BYTES = 50 * 1024 * 1024
+MAX_EXTRACTED_FILES = 1000
+MAX_FILE_BYTES = 5 * 1024 * 1024
+ALLOWED_RESOURCE_EXTENSIONS = {
+    ".css",
+    ".csv",
+    ".gif",
+    ".html",
+    ".jpeg",
+    ".jpg",
+    ".js",
+    ".json",
+    ".md",
+    ".pdf",
+    ".png",
+    ".py",
+    ".svg",
+    ".toml",
+    ".ts",
+    ".tsx",
+    ".txt",
+    ".vue",
+    ".webp",
+    ".yaml",
+    ".yml",
+}
+TEXT_RESOURCE_EXTENSIONS = {
+    ".css",
+    ".csv",
+    ".html",
+    ".js",
+    ".json",
+    ".md",
+    ".py",
+    ".svg",
+    ".toml",
+    ".ts",
+    ".tsx",
+    ".txt",
+    ".vue",
+    ".yaml",
+    ".yml",
+}
 
 
 def install_skill(url, skill_id=None):
@@ -70,7 +113,7 @@ def install_skill_pack(url, pack_id=None):
 
     errors = []
     try:
-        downloaded = _download_github_zip_files(github)
+        downloaded, errors = _download_github_zip_files(github)
     except Exception as exc:
         return {
             "ok": True,
@@ -168,6 +211,61 @@ def read_skill(skill_id):
     }
 
 
+def list_skill_resources(skill_id):
+    resolved = _resolve_skill(skill_id)
+    if not resolved["ok"]:
+        return resolved
+    skill = resolved["skill"]
+    return {
+        "ok": True,
+        "skill_id": skill_id,
+        "root_dir": skill.get("root_dir"),
+        "resources": skill.get("resources", []),
+    }
+
+
+def read_skill_resource(skill_id, resource_path, max_chars=8000):
+    resolved = _resolve_skill(skill_id)
+    if not resolved["ok"]:
+        return resolved
+    skill = resolved["skill"]
+    root_dir = Path(skill.get("root_dir") or "").resolve()
+    requested = str(resource_path or "").replace("\\", "/").lstrip("/")
+    try:
+        path = (root_dir / requested).resolve()
+        path.relative_to(root_dir)
+    except Exception:
+        return _error("read_skill_resource", "invalid_resource_path", "resource_path must stay within skill root_dir")
+    if not path.exists() or not path.is_file():
+        return _error("read_skill_resource", "resource_not_found", f"resource not found: {resource_path}")
+    relative = path.relative_to(root_dir).as_posix()
+    if relative not in set(skill.get("resources", [])):
+        return _error("read_skill_resource", "resource_not_found", f"resource is not listed for skill: {resource_path}")
+
+    size = path.stat().st_size
+    suffix = path.suffix.lower()
+    metadata = {"path": relative, "size": size, "extension": suffix}
+    if suffix not in TEXT_RESOURCE_EXTENSIONS:
+        return {
+            "ok": False,
+            "tool": "read_skill_resource",
+            "error": {"code": "unsupported_binary", "message": "binary or unsupported resource cannot be read as text", "details": metadata},
+            "metadata": metadata,
+        }
+
+    text = path.read_text(encoding="utf-8", errors="replace")
+    max_chars = max(0, int(max_chars or 8000))
+    truncated = len(text) > max_chars
+    return {
+        "ok": True,
+        "skill_id": skill_id,
+        "resource_path": relative,
+        "content": text[:max_chars],
+        "truncated": truncated,
+        "metadata": metadata,
+    }
+
+
 def enable_skill(skill_id):
     return _set_skill_enabled(skill_id, True)
 
@@ -253,20 +351,36 @@ def _download_github_zip_files(github):
     url = f"https://api.github.com/repos/{github['owner']}/{github['repo']}/zipball/{quote(github['branch'])}"
     response = requests.get(url, timeout=60)
     response.raise_for_status()
+    if len(response.content or b"") > MAX_ZIP_BYTES:
+        raise ValueError(f"zipball exceeds MAX_ZIP_BYTES ({MAX_ZIP_BYTES})")
     files = {}
+    errors = []
     with zipfile.ZipFile(BytesIO(response.content)) as archive:
         members = [name for name in archive.namelist() if not name.endswith("/")]
         if not members:
-            return files
+            return files, errors
         top_prefix = members[0].split("/", 1)[0] + "/"
+        extracted_count = 0
         for member in members:
             if not member.startswith(top_prefix):
                 continue
             rel_path = member[len(top_prefix) :]
             if not rel_path:
                 continue
+            suffix = Path(rel_path).suffix.lower()
+            info = archive.getinfo(member)
+            if suffix not in ALLOWED_RESOURCE_EXTENSIONS:
+                errors.append({"path": rel_path, "code": "unsupported_extension", "error": f"unsupported extension: {suffix or '<none>'}"})
+                continue
+            if info.file_size > MAX_FILE_BYTES:
+                errors.append({"path": rel_path, "code": "file_too_large", "error": f"file exceeds MAX_FILE_BYTES ({MAX_FILE_BYTES})"})
+                continue
+            if extracted_count >= MAX_EXTRACTED_FILES:
+                errors.append({"path": rel_path, "code": "too_many_files", "error": f"zipball exceeds MAX_EXTRACTED_FILES ({MAX_EXTRACTED_FILES})"})
+                continue
             files[rel_path] = archive.read(member)
-    return files
+            extracted_count += 1
+    return files, errors
 
 
 def _filter_downloaded_roots(downloaded, scan_roots):

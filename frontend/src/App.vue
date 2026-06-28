@@ -31,6 +31,7 @@
         @enable="handleEnableSkill"
         @disable="handleDisableSkill"
         @delete="handleDeleteSkill"
+        @read-resource="handleReadSkillResource"
       />
     </aside>
   </main>
@@ -51,6 +52,7 @@ import {
   fetchTodos,
   installSkill,
   readSkill,
+  readSkillResource,
   rollbackEvolution,
   sendChat
 } from './api/chat'
@@ -188,6 +190,15 @@ async function handleViewSkill(payload) {
   try {
     const result = await readSkill(payload.skill_id)
     payload.onSuccess?.(result.skill || result)
+  } catch (error) {
+    payload.onError?.(error)
+  }
+}
+
+async function handleReadSkillResource(payload) {
+  try {
+    const result = await readSkillResource(payload.skill_id, payload.resource_path)
+    payload.onSuccess?.(result)
   } catch (error) {
     payload.onError?.(error)
   }
