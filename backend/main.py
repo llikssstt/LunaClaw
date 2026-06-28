@@ -25,6 +25,7 @@ from tools.skill_installer_tool import (
     list_skills as list_installed_skills,
     read_skill,
     read_skill_resource,
+    search_skill_resources,
 )
 from tools.todo_tool import TodoStore
 
@@ -274,6 +275,14 @@ def install_skill_endpoint(request: SkillInstallRequest):
 @app.get("/skills/{skill_id}/resources")
 def skill_resources(skill_id: str):
     result = list_skill_resources(skill_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=_skill_error_status(result), detail=result["error"])
+    return result
+
+
+@app.get("/skills/{skill_id}/resources/search")
+def skill_resource_search(skill_id: str, query: str, top_k: int = 5):
+    result = search_skill_resources(skill_id, query, top_k=top_k)
     if not result.get("ok"):
         raise HTTPException(status_code=_skill_error_status(result), detail=result["error"])
     return result

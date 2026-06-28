@@ -10,6 +10,11 @@ class VAgentState(TypedDict, total=False):
     current_task: str
     vision_result: Dict[str, Any]
     memory_result: Dict[str, Any]
+    memory_context: str
+    active_skills: List[Dict[str, Any]]
+    skill_context: str
+    skill_trace: List[Dict[str, Any]]
+    skill_resource_results: List[Dict[str, Any]]
     candidate_tools: List[Dict[str, Any]]
     selected_tool: Dict[str, Any]
     security_review: Dict[str, Any]
@@ -23,4 +28,3 @@ class VAgentState(TypedDict, total=False):
     final_reply: str
     emotion: str
     sources: List[Dict[str, Any]]
-

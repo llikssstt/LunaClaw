@@ -1,53 +1,21 @@
-# 基于大语言模型的生活陪伴型网页 Agent
+# V-Agent
 
-这是一个《自然语言处理》课程大作业 MVP。项目实现了原创网页陪伴 Agent“LunaClaw”，支持多轮文字聊天、两阶段 LLM 决策、emotion 状态输出、长期记忆和工具调用。
+V-Agent is a general FastAPI + Vue agent system. The default `/chat` runtime is `GraphCore`, a LangGraph-based multi-agent flow that combines memory retrieval, Skill matching, Skill Pack resource reading, tool execution traces, image input, and final response generation.
 
-项目默认支持 mock 模式。没有 API Key 时也能启动、聊天和演示完整主链路。
+The legacy `AgentCore` is still available with `AGENT_RUNTIME=legacy`.
 
-## 功能列表
+## Features
 
-- 原创网页陪伴 Agent“LunaClaw”人格设定
-- FastAPI REST 后端
-- Vue 3 + Vite 前端
-- Planner + Responder 两阶段 Agent 流程
-- OpenAI 兼容格式 LLM 调用
-- 无 API Key 的 mock 模式
-- JSON 文件长期记忆
-- 时间、计算器、待办、学习计划四类工具
-- emotion 驱动的角色状态展示
-- 状态面板展示 emotion、工具和记忆动作
-- 测试用例和 1 分钟演示脚本
+- LangGraph `GraphCore` runtime with Agent Flow tracing.
+- Memory RAG through `MemoryCore` and `/memory` APIs.
+- Skill Pack installation, lifecycle management, and resource viewing.
+- Skill Resource Reader for safe text resource search/read inside a Skill root.
+- Tool Store and Permission Review for approved tool installation.
+- Tool Trace, Sources, Active Skills, Skill Trace, and Agent Flow in chat output.
+- Image upload with `file_id` attachments; server paths are stored only in `uploads_index.json`.
+- Mock LLM mode when no `LLM_API_KEY` is configured.
 
-## 技术栈
-
-- 后端：Python, FastAPI, Uvicorn, pytest
-- 前端：Vue 3, Vite, CSS
-- 存储：JSON 文件
-- LLM：OpenAI 兼容 Chat Completions API
-
-## 项目结构
-
-```text
-backend/
-  main.py
-  requirements.txt
-  .env.example
-  agent/
-  tools/
-  storage/
-  tests/
-frontend/
-  package.json
-  index.html
-  vite.config.js
-  src/
-docs/
-  test_cases.md
-  demo_script.md
-  superpowers/
-```
-
-## 启动后端
+## Run
 
 ```powershell
 cd backend
@@ -55,196 +23,68 @@ python -m pip install -r requirements.txt
 python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-健康检查：
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/health
-```
-
-## 启动前端
-
 ```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-浏览器打开：
+Open:
 
 ```text
 http://127.0.0.1:5173
 ```
 
-## 环境变量配置
+## Runtime
 
-复制 `backend/.env.example`，或在终端设置：
+Default:
 
 ```powershell
-$env:LLM_API_KEY="你的 API Key"
+$env:AGENT_RUNTIME="graph"
+```
+
+Legacy:
+
+```powershell
+$env:AGENT_RUNTIME="legacy"
+```
+
+LLM settings:
+
+```powershell
+$env:LLM_API_KEY="..."
 $env:LLM_BASE_URL="https://api.openai.com/v1"
 $env:LLM_MODEL="gpt-4o-mini"
 ```
 
-后端会读取：
+## Demo Flow
 
-- `LLM_API_KEY`
-- `LLM_BASE_URL`
-- `LLM_MODEL`
-- `SEARCH_PROVIDER`：可选，`tavily` 或 `brave`，默认 `tavily`
-- `SEARCH_API_KEY`：可选，联网搜索 API Key
-- `SEARCH_BASE_URL`：可选，自定义搜索服务地址
+1. Ask V-Agent to install a web reading tool.
+2. Review permissions in Permission Review and approve.
+3. Confirm `web_reader` appears in Tool Store.
+4. Ask: `use web_reader to summarize this page: https://example.com`.
+5. Inspect Tool Trace, Sources, and Agent Flow.
+6. Install or view a Skill Pack, then ask a query matching its triggers.
+7. Inspect Active Skills, Skill Trace, and Skill resource results.
+8. Upload an image and ask V-Agent to analyze it.
 
-联网工具说明：
+## Safety Notes
 
-- `web_search` 用于搜索最新信息，例如新闻、GitHub 版本、论文、价格、政策等。
-- `web_fetch` 用于读取指定网页正文。
-- 如果没有配置 `SEARCH_API_KEY`，搜索工具会返回结构化错误，不会让后端崩溃；Responder 会说明当前无法获取最新信息。
+- Unknown downloaded scripts are not executed.
+- MCP is not connected in this phase.
+- Tool execution is limited to approved demo tools.
+- Skill resources are searched/read as text only and constrained to their Skill root.
+- Runtime files are ignored: uploads, installed tool registry, approvals, installed packages, generated Skills, and logs.
 
-## Mock 模式说明
-
-如果没有设置 `LLM_API_KEY`，后端自动进入 mock 模式。mock 模式仍然返回合法 JSON，并能演示：
-
-- 基础聊天
-- emotion 切换
-- 记忆写入和读取
-- 时间工具
-- 安全计算器
-- 待办工具
-- 学习计划工具
-- 联网搜索工具的结构化错误返回
-
-真实 API 配置应写入 `backend/.env`，不要写入 `.env.example`。`.env.example` 只保留空模板。
-
-## Tool 与 Skill 注册表
-
-工具系统现在通过 `backend/tools/registry.py` 统一注册，`AVAILABLE_TOOLS` 会从注册表动态生成。新增工具时只需要注册 `ToolSpec`，并提供 handler。
-
-Skill 会从两个目录加载：
-
-```text
-backend/skills/*.md
-backend/generated_skills/*.md
-```
-
-`backend/skills` 存放项目内置 Skill；`backend/generated_skills` 是 Self-Evolution 运行时生成内容，默认不提交到 Git。Skill frontmatter 中可以配置 `triggers` 或 `trigger_examples`，命中后会注入 Planner/Responder prompt。
-
-## Memory RAG 模块
-
-项目现在包含本地语义 Memory RAG。后端使用本地 embedding 模型：
-
-```text
-C:\Users\Likssstt\Documents\Playground\course_rag_system\data\models\bge-small-zh-v1.5
-```
-
-记忆系统包含：
-
-- `backend/storage/memory.json`：长期结构化记忆
-- `backend/storage/user_profile.json`：用户画像
-- `backend/storage/conversations.db`：历史对话和记忆向量
-- `backend/storage/memory_logs.jsonl`：记忆操作日志
-
-主要接口：
-
-- `GET /memory`
-- `POST /memory`
-- `PUT /memory/{memory_id}`
-- `DELETE /memory/{memory_id}`
-- `GET /memory/search?query=xxx`
-- `GET /memory/logs`
-
-聊天接口 `/chat` 会自动保存历史对话、检索相关记忆，并返回 `retrieved_memories` 供前端展示。
-
-## Self-Evolution 模块
-
-项目现在包含可解释的 Self-Evolution 机制。这里的“自我进化”不是自我意识，而是每轮对话后的结构化反思、偏好学习、策略沉淀和可回滚日志。
-
-运行时文件：
-
-```text
-backend/storage/evolution_log.jsonl
-backend/storage/evolution_state.json
-backend/generated_skills/*.md
-```
-
-这些文件是运行时产物，默认不提交到 Git。核心行为：
-
-- `/chat` 回复后执行 `evolution_reflection` 反思阶段。
-- 达到阈值后自动生成并启用 Skill。
-- 返回 `evolution_events`、`active_skills`、`evolution_summary` 供前端展示。
-- 右侧 Self-Evolution 面板展示日志、已启用 Skill，并支持回滚。
-
-主要接口：
-
-- `GET /evolution/logs`
-- `GET /evolution/skills`
-- `POST /evolution/rollback/{operation_id}`
-
-## API 接口
-
-### GET `/health`
-
-返回：
-
-```json
-{ "status": "ok" }
-```
-
-### POST `/chat`
-
-请求：
-
-```json
-{
-  "message": "你好呀，你是谁？",
-  "session_id": "default"
-}
-```
-
-响应：
-
-```json
-{
-  "reply": "Agent 回复",
-  "emotion": "happy",
-  "tool_used": "none",
-  "skills_used": ["persona_skill", "chat_skill"],
-  "memory_action": "none"
-}
-```
-
-### GET `/memory`
-
-返回当前长期记忆列表。
-
-### DELETE `/memory/{memory_id}`
-
-删除指定记忆。
-
-### GET `/todos`
-
-返回当前待办列表。
-
-## 测试
-
-后端测试：
+## Test
 
 ```powershell
-python -m pytest backend/tests -q
+python -m pytest backend\tests -q
 ```
-
-前端构建：
 
 ```powershell
 cd frontend
 npm run build
 ```
 
-## 后续优化方向
-
-- 增加 TTS
-- 增加 ASR
-- 增加口型同步
-- 使用向量数据库优化记忆检索
-- 增加更丰富的工具系统
-- 接入直播弹幕互动
-- 增加人格一致性评估
+If Vite/esbuild fails in a sandbox with `spawn EPERM`, run the same build command outside the sandbox.

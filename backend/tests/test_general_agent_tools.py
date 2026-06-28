@@ -166,7 +166,7 @@ def test_chat_mock_still_returns_required_fields_for_general_agent():
     assert response.status_code == 200
     data = response.json()
     assert {"reply", "tool_used", "skills_used", "retrieved_memories", "evolution_events", "active_skills"}.issubset(data)
-    assert data["tool_used"] in {"none", "time", "calculator", "todo", "study_plan", "web_search", "web_fetch"}
+    assert data["tool_used"] in set(get_tool_names()) | {"none"}
 
 
 def test_agent_injects_matched_skills_into_planner_context():

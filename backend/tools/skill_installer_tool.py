@@ -224,6 +224,43 @@ def list_skill_resources(skill_id):
     }
 
 
+def search_skill_resources(skill_id, query, top_k=5):
+    resolved = _resolve_skill(skill_id)
+    if not resolved["ok"]:
+        return resolved
+    skill = resolved["skill"]
+    root_dir = Path(skill.get("root_dir") or "").resolve()
+    query_terms = _query_terms(query)
+    try:
+        top_k = max(1, min(int(top_k or 5), 20))
+    except (TypeError, ValueError):
+        top_k = 5
+
+    results = []
+    for relative in skill.get("resources", []) or []:
+        path = (root_dir / relative).resolve()
+        try:
+            path.relative_to(root_dir)
+        except ValueError:
+            continue
+        if path.suffix.lower() not in TEXT_RESOURCE_EXTENSIONS or not path.exists() or not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        score = _resource_score(text, relative, query_terms)
+        if score <= 0:
+            continue
+        results.append(
+            {
+                "resource_path": relative,
+                "snippet": _resource_snippet(text, query_terms),
+                "score": score,
+                "metadata": {"path": relative, "size": path.stat().st_size, "extension": path.suffix.lower()},
+            }
+        )
+    results.sort(key=lambda item: (-item["score"], item["resource_path"]))
+    return {"ok": True, "skill_id": skill_id, "query": query, "results": results[:top_k]}
+
+
 def read_skill_resource(skill_id, resource_path, max_chars=8000):
     resolved = _resolve_skill(skill_id)
     if not resolved["ok"]:
@@ -519,6 +556,29 @@ def _decode_text(value):
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
     return str(value or "")
+
+
+def _query_terms(query):
+    return [term.lower() for term in re.findall(r"[\w\u4e00-\u9fff]+", str(query or "")) if len(term.strip()) >= 2]
+
+
+def _resource_score(text, path, terms):
+    haystack = f"{path}\n{text}".lower()
+    if not terms:
+        return 0
+    return sum(haystack.count(term) for term in terms)
+
+
+def _resource_snippet(text, terms, max_chars=260):
+    lower = text.lower()
+    index = 0
+    for term in terms:
+        found = lower.find(term)
+        if found >= 0:
+            index = max(0, found - 80)
+            break
+    snippet = text[index : index + max_chars]
+    return re.sub(r"\s+", " ", snippet).strip()
 
 
 def _stem_from_url(url):

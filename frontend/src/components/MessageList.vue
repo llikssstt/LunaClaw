@@ -25,7 +25,7 @@
       </div>
 
       <div
-        v-if="hasSources(message) || hasToolTrace(message) || hasActiveSkills(message) || hasAgentFlow(message)"
+        v-if="hasSources(message) || hasToolTrace(message) || hasActiveSkills(message) || hasSkillTrace(message) || hasAgentFlow(message)"
         class="chat-artifacts"
       >
         <details v-if="hasAgentFlow(message)">
@@ -58,6 +58,26 @@
               <strong>Step {{ trace.step }} · {{ trace.tool_call?.name || 'none' }}</strong>
               <small>ok: {{ trace.tool_result?.ok === false ? 'false' : 'true' }}</small>
               <pre v-if="trace.tool_call?.arguments">{{ formatJson(trace.tool_call.arguments) }}</pre>
+            </li>
+          </ul>
+        </details>
+
+        <details v-if="hasSkillTrace(message)">
+          <summary>Skill Trace</summary>
+          <ul class="artifact-list">
+            <li v-for="skill in message.skill_trace" :key="skill.skill_id || skill.name">
+              <strong>{{ skill.name || skill.skill_id }}</strong>
+              <small>{{ skill.source || 'skill' }} · {{ skill.skill_id || 'no id' }}</small>
+              <p v-if="skill.description">{{ skill.description }}</p>
+              <div v-if="skill.triggers && skill.triggers.length" class="tag-row">
+                <small v-for="trigger in skill.triggers.slice(0, 8)" :key="trigger">{{ trigger }}</small>
+              </div>
+            </li>
+          </ul>
+          <ul v-if="message.skill_resource_results && message.skill_resource_results.length" class="artifact-list">
+            <li v-for="resource in message.skill_resource_results" :key="`${resource.skill_id}-${resource.resource_path}`">
+              <strong>{{ resource.resource_path }}</strong>
+              <small>{{ resource.skill_name || resource.skill_id }} · score {{ resource.score }}</small>
             </li>
           </ul>
         </details>
@@ -99,6 +119,10 @@ function hasToolTrace(message) {
 
 function hasActiveSkills(message) {
   return Array.isArray(message.active_skills) && message.active_skills.length > 0
+}
+
+function hasSkillTrace(message) {
+  return Array.isArray(message.skill_trace) && message.skill_trace.length > 0
 }
 
 function hasAgentFlow(message) {

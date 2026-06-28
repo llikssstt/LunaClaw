@@ -5,6 +5,8 @@ from agent_graph.nodes.memory_node import memory_node
 from agent_graph.nodes.multimodal_node import multimodal_node
 from agent_graph.nodes.response_node import response_node
 from agent_graph.nodes.security_review_node import security_review_node
+from agent_graph.nodes.skill_node import skill_node
+from agent_graph.nodes.skill_resource_node import skill_resource_node
 from agent_graph.nodes.supervisor_node import supervisor_node
 from agent_graph.nodes.tool_install_node import tool_install_node
 from agent_graph.nodes.tool_search_node import tool_search_node
@@ -32,6 +34,8 @@ class GraphCore:
         graph = StateGraph(VAgentState)
         graph.add_node("supervisor", supervisor_node)
         graph.add_node("memory", memory_node)
+        graph.add_node("skill", skill_node)
+        graph.add_node("skill_resource", skill_resource_node)
         graph.add_node("multimodal", multimodal_node)
         graph.add_node("tool_search", tool_search_node)
         graph.add_node("security_review", security_review_node)
@@ -41,9 +45,11 @@ class GraphCore:
 
         graph.set_entry_point("supervisor")
         graph.add_edge("supervisor", "memory")
+        graph.add_edge("memory", "skill")
+        graph.add_edge("skill", "skill_resource")
         graph.add_conditional_edges(
-            "memory",
-            _route_after_memory,
+            "skill_resource",
+            _route_after_skill_resource,
             {
                 "multimodal": "multimodal",
                 "tool_search": "tool_search",
@@ -86,7 +92,9 @@ class GraphCore:
             "memory_action": (state.get("memory_result") or {}).get("memory_action", "none"),
             "retrieved_memories": (state.get("memory_result") or {}).get("retrieved_memories", []),
             "evolution_events": [],
-            "active_skills": [],
+            "active_skills": state.get("active_skills", []),
+            "skill_trace": state.get("skill_trace", []),
+            "skill_resource_results": state.get("skill_resource_results", []),
             "evolution_summary": "",
             "tool_trace": state.get("tool_trace", []),
             "sources": state.get("sources", []),
@@ -98,7 +106,7 @@ class GraphCore:
         }
 
 
-def _route_after_memory(state):
+def _route_after_skill_resource(state):
     route = state.get("route")
     if route in {"multimodal", "tool_search", "execute_tool"}:
         return route

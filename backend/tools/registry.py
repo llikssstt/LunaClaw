@@ -3,7 +3,7 @@ from typing import Callable, Dict
 
 from tools.calculator_tool import calculate
 from tools.study_plan_tool import generate_study_plan
-from tools.skill_installer_tool import install_skill, install_skill_pack, list_skill_resources, list_skills, read_skill_resource
+from tools.skill_installer_tool import install_skill, install_skill_pack, list_skill_resources, list_skills, read_skill_resource, search_skill_resources
 from tools.time_tool import get_current_time
 from tools.todo_tool import run_todo
 from tools.web_tools import web_fetch, web_search
@@ -64,6 +64,10 @@ def _read_skill_resource_handler(args):
     return read_skill_resource(args.get("skill_id", ""), args.get("resource_path", ""), max_chars=args.get("max_chars", 8000))
 
 
+def _search_skill_resources_handler(args):
+    return search_skill_resources(args.get("skill_id", ""), args.get("query", ""), top_k=args.get("top_k", 5))
+
+
 TOOL_REGISTRY: Dict[str, ToolSpec] = {
     "time": ToolSpec("time", "获取当前时间", {}, _time_handler),
     "calculator": ToolSpec("calculator", "计算简单四则运算表达式", {"expression": "表达式"}, _calculator_handler),
@@ -104,6 +108,12 @@ TOOL_REGISTRY.update(
             "Read a text resource from a Skill pack root without executing it",
             {"skill_id": "Skill id", "resource_path": "Relative resource path", "max_chars": 8000},
             _read_skill_resource_handler,
+        ),
+        "search_skill_resources": ToolSpec(
+            "search_skill_resources",
+            "Search text resources inside a Skill pack root without executing files",
+            {"skill_id": "Skill id", "query": "Search query", "top_k": 5},
+            _search_skill_resources_handler,
         ),
     }
 )

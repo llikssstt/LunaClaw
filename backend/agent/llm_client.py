@@ -126,12 +126,16 @@ class LLMClient:
         planner = context.get("planner", {})
         memory_result = context.get("memory_result", {})
         tool_trace = context.get("tool_trace") or []
+        skill_resource_results = context.get("skill_resource_results") or []
         tool_result = self._last_tool_result(tool_trace) or context.get("tool_result", {})
         emotion = planner.get("emotion", "neutral")
         tool_name = (tool_result or {}).get("tool") or (planner.get("tool_call") or {}).get("name", "none")
         memory_action = planner.get("memory_action", "none")
 
-        if tool_name == "study_plan" and tool_result.get("result", {}).get("ok"):
+        if skill_resource_results:
+            first = skill_resource_results[0]
+            reply = f"我参考了 Skill 资源 {first.get('resource_path')}：{first.get('content', '')[:600]}"
+        elif tool_name == "study_plan" and tool_result.get("result", {}).get("ok"):
             result = tool_result["result"]
             reply = "收到，今晚走“别整虚的，直接推进”路线：\n" + "\n".join(f"{i + 1}. {step}" for i, step in enumerate(result.get("steps", [])))
         elif tool_name == "calculator":
