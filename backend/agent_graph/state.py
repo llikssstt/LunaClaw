@@ -8,6 +8,10 @@ class VAgentState(TypedDict, total=False):
     attachments: List[Dict[str, Any]]
     route: str
     current_task: str
+    task_id: str
+    task: Dict[str, Any]
+    planner_result: Dict[str, Any]
+    tool_intent: Dict[str, Any]
     vision_result: Dict[str, Any]
     memory_result: Dict[str, Any]
     memory_context: str

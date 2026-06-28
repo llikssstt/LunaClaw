@@ -24,6 +24,16 @@
         @enable="handleEnableTool"
         @disable="handleDisableTool"
       />
+      <TaskPanel
+        :tasks="tasks"
+        @refresh="loadPanels"
+        @run-next="handleRunTaskNext"
+        @run-loop="handleRunTaskLoop"
+        @pause="handlePauseTask"
+        @resume="handleResumeTask"
+        @cancel="handleCancelTask"
+        @retry-step="handleRetryTaskStep"
+      />
       <EvolutionPanel
         :logs="evolutionLogs"
         :skills="evolutionSkills"
@@ -63,17 +73,24 @@ import {
   enableTool,
   enableSkill,
   approveTool,
+  cancelTask,
   fetchTools,
   fetchEvolutionLogs,
   fetchEvolutionSkills,
   fetchMemory,
   fetchSkills,
+  fetchTasks,
   fetchTodos,
   installSkill,
   installTool,
   readSkill,
   readSkillResource,
   rollbackEvolution,
+  pauseTask,
+  resumeTask,
+  retryTaskStep,
+  runTaskNext,
+  runTaskUntilIdle,
   searchTools,
   sendChat,
   uploadImage
@@ -85,6 +102,7 @@ import MemoryPanel from './components/MemoryPanel.vue'
 import PermissionReviewPanel from './components/PermissionReviewPanel.vue'
 import SkillManagerPanel from './components/SkillManagerPanel.vue'
 import StatusPanel from './components/StatusPanel.vue'
+import TaskPanel from './components/TaskPanel.vue'
 import TodoPanel from './components/TodoPanel.vue'
 import ToolStorePanel from './components/ToolStorePanel.vue'
 
@@ -114,6 +132,7 @@ const evolutionSkills = ref([])
 const installedSkills = ref([])
 const marketTools = ref([])
 const installedTools = ref([])
+const tasks = ref([])
 const agentFlow = ref([])
 const pendingApproval = ref(null)
 const loading = ref(false)
@@ -182,13 +201,14 @@ async function handleSend(payload) {
 
 async function loadPanels() {
   try {
-    const [memoryData, todoData, logData, evolutionSkillData, installedSkillData, toolData] = await Promise.all([
+    const [memoryData, todoData, logData, evolutionSkillData, installedSkillData, toolData, taskData] = await Promise.all([
       fetchMemory(),
       fetchTodos(),
       fetchEvolutionLogs(),
       fetchEvolutionSkills(),
       fetchSkills(),
-      fetchTools()
+      fetchTools(),
+      fetchTasks()
     ])
     memories.value = memoryData
     todos.value = todoData
@@ -197,12 +217,14 @@ async function loadPanels() {
     installedSkills.value = installedSkillData.skills || []
     marketTools.value = toolData.market || []
     installedTools.value = toolData.installed || []
+    tasks.value = taskData.tasks || []
   } catch {
     memories.value = memories.value
     todos.value = todos.value
     evolutionLogs.value = evolutionLogs.value
     evolutionSkills.value = evolutionSkills.value
     installedSkills.value = installedSkills.value
+    tasks.value = tasks.value
   }
 }
 
@@ -279,6 +301,36 @@ async function handleEnableTool(tool) {
 
 async function handleDisableTool(tool) {
   await disableTool(tool.tool_id)
+  await loadPanels()
+}
+
+async function handleRunTaskNext(task) {
+  await runTaskNext(task.task_id)
+  await loadPanels()
+}
+
+async function handleRunTaskLoop(task) {
+  await runTaskUntilIdle(task.task_id, 5)
+  await loadPanels()
+}
+
+async function handlePauseTask(task) {
+  await pauseTask(task.task_id)
+  await loadPanels()
+}
+
+async function handleResumeTask(task) {
+  await resumeTask(task.task_id)
+  await loadPanels()
+}
+
+async function handleCancelTask(task) {
+  await cancelTask(task.task_id)
+  await loadPanels()
+}
+
+async function handleRetryTaskStep(payload) {
+  await retryTaskStep(payload.task.task_id, payload.step.step_id)
   await loadPanels()
 }
 

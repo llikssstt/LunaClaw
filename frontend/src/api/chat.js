@@ -100,6 +100,37 @@ export function fetchTools() {
   return request('/tools')
 }
 
+export function fetchTasks() {
+  return request('/tasks')
+}
+
+export function runTaskNext(taskId) {
+  return request(`/tasks/${encodeURIComponent(taskId)}/run-next`, { method: 'POST' })
+}
+
+export function runTaskUntilIdle(taskId, maxSteps = 5) {
+  return request(`/tasks/${encodeURIComponent(taskId)}/run-until-idle`, {
+    method: 'POST',
+    body: JSON.stringify({ max_steps: maxSteps })
+  })
+}
+
+export function pauseTask(taskId) {
+  return request(`/tasks/${encodeURIComponent(taskId)}/pause`, { method: 'POST' })
+}
+
+export function resumeTask(taskId) {
+  return request(`/tasks/${encodeURIComponent(taskId)}/resume`, { method: 'POST' })
+}
+
+export function cancelTask(taskId) {
+  return request(`/tasks/${encodeURIComponent(taskId)}/cancel`, { method: 'POST' })
+}
+
+export function retryTaskStep(taskId, stepId) {
+  return request(`/tasks/${encodeURIComponent(taskId)}/steps/${encodeURIComponent(stepId)}/retry`, { method: 'POST' })
+}
+
 export function searchTools(query) {
   return request('/tools/search', {
     method: 'POST',

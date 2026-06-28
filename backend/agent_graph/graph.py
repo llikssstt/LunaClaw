@@ -3,6 +3,7 @@ from langgraph.graph import END, StateGraph
 from agent_graph.nodes.execution_node import execution_node
 from agent_graph.nodes.memory_node import memory_node
 from agent_graph.nodes.multimodal_node import multimodal_node
+from agent_graph.nodes.planner_node import planner_node
 from agent_graph.nodes.response_node import response_node
 from agent_graph.nodes.security_review_node import security_review_node
 from agent_graph.nodes.skill_node import skill_node
@@ -33,6 +34,7 @@ class GraphCore:
     def _build_graph(self):
         graph = StateGraph(VAgentState)
         graph.add_node("supervisor", supervisor_node)
+        graph.add_node("planner", planner_node)
         graph.add_node("memory", memory_node)
         graph.add_node("skill", skill_node)
         graph.add_node("skill_resource", skill_resource_node)
@@ -44,7 +46,8 @@ class GraphCore:
         graph.add_node("response", response_node)
 
         graph.set_entry_point("supervisor")
-        graph.add_edge("supervisor", "memory")
+        graph.add_edge("supervisor", "planner")
+        graph.add_edge("planner", "memory")
         graph.add_edge("memory", "skill")
         graph.add_edge("skill", "skill_resource")
         graph.add_conditional_edges(
@@ -103,6 +106,8 @@ class GraphCore:
             "approval_id": state.get("approval_id"),
             "security_review": state.get("security_review", {}),
             "candidate_tools": state.get("candidate_tools", []),
+            "task": state.get("task", {}),
+            "planner_result": state.get("planner_result", {}),
         }
 
 

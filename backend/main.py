@@ -9,6 +9,9 @@ from typing import Any, Dict, List, Optional
 
 from agent.agent_core import AgentCore
 from agent_graph.graph import GraphCore
+from agent_graph.task_scheduler import TaskScheduler
+from agent_graph.task_runtime import TaskNotRunnable, TaskRuntime, TaskStepNotRetryable
+from agent_graph.task_runner import run_task_step, run_task_until_idle
 from agent_graph.uploads import register_upload
 from agent.memory_core import MemoryCore
 from agent.memory import MemoryStore
@@ -82,6 +85,14 @@ class ToolApprovalRequest(BaseModel):
 class ToolRunRequest(BaseModel):
     tool_name: str = "fetch_page"
     arguments: Dict[str, Any] = {}
+
+
+class TaskRunRequest(BaseModel):
+    max_steps: int = 5
+
+
+class TaskSchedulerRequest(BaseModel):
+    max_steps_per_tick: int = 1
 
 
 @app.get("/health")
@@ -188,6 +199,99 @@ def upload_image(file: UploadFile = File(...)):
         "size": record["size"],
         "type": "image",
     }
+
+
+@app.get("/tasks")
+def list_tasks():
+    return {"tasks": TaskRuntime().list_tasks()}
+
+
+@app.get("/tasks/scheduler")
+def task_scheduler_status():
+    return {"scheduler": TaskScheduler().status()}
+
+
+@app.post("/tasks/scheduler/start")
+def start_task_scheduler(request: TaskSchedulerRequest):
+    return {"ok": True, "scheduler": TaskScheduler().start(request.max_steps_per_tick)}
+
+
+@app.post("/tasks/scheduler/stop")
+def stop_task_scheduler():
+    return {"ok": True, "scheduler": TaskScheduler().stop()}
+
+
+@app.post("/tasks/scheduler/tick")
+def tick_task_scheduler():
+    return TaskScheduler().tick()
+
+
+@app.get("/tasks/{task_id}")
+def task_detail(task_id: str):
+    try:
+        return TaskRuntime().get_task(task_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="task not found")
+
+
+@app.post("/tasks/{task_id}/run-next")
+def run_next_task_step(task_id: str):
+    try:
+        return run_task_step(task_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="task not found")
+    except TaskNotRunnable as exc:
+        raise HTTPException(status_code=409, detail=f"task is {exc.status}")
+
+
+@app.post("/tasks/{task_id}/run-until-idle")
+def run_task_until_idle_endpoint(task_id: str, request: TaskRunRequest):
+    try:
+        return run_task_until_idle(task_id, request.max_steps)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="task not found")
+    except TaskNotRunnable as exc:
+        raise HTTPException(status_code=409, detail=f"task is {exc.status}")
+
+
+@app.post("/tasks/{task_id}/pause")
+def pause_task(task_id: str):
+    try:
+        return {"ok": True, "task": TaskRuntime().pause_task(task_id)}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="task not found")
+    except TaskNotRunnable as exc:
+        raise HTTPException(status_code=409, detail=f"task is {exc.status}")
+
+
+@app.post("/tasks/{task_id}/resume")
+def resume_task(task_id: str):
+    try:
+        return {"ok": True, "task": TaskRuntime().resume_task(task_id)}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="task not found")
+    except TaskNotRunnable as exc:
+        raise HTTPException(status_code=409, detail=f"task is {exc.status}")
+
+
+@app.post("/tasks/{task_id}/cancel")
+def cancel_task(task_id: str):
+    try:
+        return {"ok": True, "task": TaskRuntime().cancel_task(task_id)}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="task not found")
+    except TaskNotRunnable as exc:
+        raise HTTPException(status_code=409, detail=f"task is {exc.status}")
+
+
+@app.post("/tasks/{task_id}/steps/{step_id}/retry")
+def retry_task_step(task_id: str, step_id: str):
+    try:
+        return {"ok": True, "task": TaskRuntime().retry_step(task_id, step_id)}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="task or step not found")
+    except TaskStepNotRetryable as exc:
+        raise HTTPException(status_code=409, detail=f"step is {exc.status}")
 
 
 @app.get("/memory")
