@@ -1,2 +1,22 @@
-[]
-
+[
+  {
+    "memory_id": "mem_c3a398663744",
+    "content": "用户正在准备 LunaClaw 课程报告",
+    "category": "project",
+    "importance": 0.9,
+    "created_at": "2026-06-27T14:59:22.701065+00:00",
+    "updated_at": "2026-06-27T14:59:28.784935+00:00",
+    "source": "manual",
+    "status": "inactive"
+  },
+  {
+    "memory_id": "mem_4b5ed03d83fa",
+    "content": "用户在学习压力下更适合先共情，再拆一个 10 分钟小动作",
+    "category": "interaction_style",
+    "importance": 0.8,
+    "created_at": "2026-06-27T14:59:37.716532+00:00",
+    "updated_at": "2026-06-27T14:59:37.716532+00:00",
+    "source": "self_evolution",
+    "status": "active"
+  }
+]

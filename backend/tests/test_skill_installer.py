@@ -1,4 +1,6 @@
 import uuid
+import zipfile
+from io import BytesIO
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -16,8 +18,9 @@ def local_tmp_path():
 
 
 class FakeResponse:
-    def __init__(self, text, status_code=200):
+    def __init__(self, text, status_code=200, content=None):
         self.text = text
+        self.content = content if content is not None else (text.encode("utf-8") if isinstance(text, str) else b"")
         self.status_code = status_code
 
     def raise_for_status(self):
@@ -98,7 +101,7 @@ def test_github_repo_url_delegates_to_pack_installer(monkeypatch):
 
     assert result["ok"] is True
     assert result["mode"] == "pack"
-    assert captured["url"].startswith("https://api.github.com/repos/Yuan1z0825/nature-skills/contents/")
+    assert captured["url"] == "https://api.github.com/repos/Yuan1z0825/nature-skills/zipball/main"
 
 
 def test_install_skill_rejects_invalid_url():
@@ -171,46 +174,29 @@ triggers:
 """
 
 
-def test_install_skill_pack_recursively_preserves_complete_directories(monkeypatch):
+def build_pack_zip():
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("pack-main/skills/nature-reader/SKILL.md", pack_skill_md("Nature Reader", "reader trigger"))
+        archive.writestr("pack-main/skills/nature-reader/helper.py", "print('helper is saved but not executed')\n")
+        archive.writestr("pack-main/skills/nature-reader/references/guide.md", "# Guide\n\nResource note.")
+        archive.writestr("pack-main/skills/nature-reader/static/icon.png", b"\x89PNG\r\n\x1a\n\x00\x00binary")
+        archive.writestr("pack-main/skills/nature-figure/SKILL.md", pack_skill_md("Nature Figure", "figure trigger"))
+        archive.writestr("pack-main/skills/nature-figure/manifest.yaml", "name: nature-figure\n")
+        archive.writestr("pack-main/docs/readme.md", "# Not a scanned skill")
+    return buffer.getvalue()
+
+
+def test_install_skill_pack_uses_zipball_and_preserves_complete_directories(monkeypatch):
     tmp_path = local_tmp_path()
     imported_dir = tmp_path / "skills" / "imported"
     monkeypatch.setattr(skill_installer_tool, "DEFAULT_IMPORTED_SKILLS_DIR", imported_dir)
-
-    api_payloads = {
-        "skills": [
-            {"type": "dir", "name": "nature-reader", "path": "skills/nature-reader"},
-            {"type": "dir", "name": "nature-figure", "path": "skills/nature-figure"},
-        ],
-        "skills/nature-reader": [
-            {"type": "file", "name": "SKILL.md", "path": "skills/nature-reader/SKILL.md", "download_url": "raw://reader-skill"},
-            {"type": "file", "name": "helper.py", "path": "skills/nature-reader/helper.py", "download_url": "raw://reader-helper"},
-            {"type": "dir", "name": "references", "path": "skills/nature-reader/references"},
-        ],
-        "skills/nature-reader/references": [
-            {"type": "file", "name": "guide.md", "path": "skills/nature-reader/references/guide.md", "download_url": "raw://reader-guide"},
-        ],
-        "skills/nature-figure": [
-            {"type": "file", "name": "SKILL.md", "path": "skills/nature-figure/SKILL.md", "download_url": "raw://figure-skill"},
-            {"type": "file", "name": "manifest.yaml", "path": "skills/nature-figure/manifest.yaml", "download_url": "raw://figure-manifest"},
-        ],
-        ".skills": [],
-        "superpowers": [],
-        "skill": [],
-    }
-    raw_payloads = {
-        "raw://reader-skill": pack_skill_md("Nature Reader", "reader trigger"),
-        "raw://reader-helper": "print('helper is saved but not executed')\n",
-        "raw://reader-guide": "# Guide\n\nResource note.",
-        "raw://figure-skill": pack_skill_md("Nature Figure", "figure trigger"),
-        "raw://figure-manifest": "name: nature-figure\n",
-    }
+    captured = {}
 
     def fake_get(url, **kwargs):
-        if url.startswith("https://api.github.com/repos/acme/pack/contents/"):
-            path = url.split("/contents/", 1)[1].split("?", 1)[0]
-            return FakeResponse(api_payloads[path])
-        if url in raw_payloads:
-            return FakeResponse(raw_payloads[url])
+        captured["url"] = url
+        if url == "https://api.github.com/repos/acme/pack/zipball/main":
+            return FakeResponse("", content=build_pack_zip())
         return FakeResponse({"message": "not found"}, status_code=404)
 
     monkeypatch.setattr(skill_installer_tool.requests, "get", fake_get)
@@ -219,6 +205,7 @@ def test_install_skill_pack_recursively_preserves_complete_directories(monkeypat
 
     assert result["ok"] is True
     assert result["mode"] == "pack"
+    assert captured["url"] == "https://api.github.com/repos/acme/pack/zipball/main"
     assert result["installed_count"] == 2
     assert result["failed_count"] == 0
     assert {skill["skill_id"] for skill in result["installed_skills"]} == {
@@ -227,12 +214,14 @@ def test_install_skill_pack_recursively_preserves_complete_directories(monkeypat
     }
     assert (imported_dir / "demo_pack" / "skills" / "nature-reader" / "helper.py").exists()
     assert (imported_dir / "demo_pack" / "skills" / "nature-reader" / "references" / "guide.md").exists()
+    assert (imported_dir / "demo_pack" / "skills" / "nature-reader" / "static" / "icon.png").read_bytes() == b"\x89PNG\r\n\x1a\n\x00\x00binary"
 
     registry = SkillRegistry(static_dir=tmp_path / "skills", generated_dir=tmp_path / "generated_skills")
     reader = next(skill for skill in registry.load_skills() if skill["skill_id"] == "demo_pack_skills_nature-reader")
     assert reader["path"].endswith("SKILL.md")
     assert "helper.py" in reader["resources"]
     assert "references/guide.md" in reader["resources"]
+    assert "static/icon.png" in reader["resources"]
     assert registry.match("please use reader trigger")[0]["skill_id"] == "demo_pack_skills_nature-reader"
 
 

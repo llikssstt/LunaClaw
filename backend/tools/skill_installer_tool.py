@@ -2,6 +2,8 @@ import hashlib
 import json
 import re
 import shutil
+import zipfile
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
@@ -66,30 +68,30 @@ def install_skill_pack(url, pack_id=None):
     if not resolved_pack_id:
         return _error("install_skill_pack", "invalid_pack_id", "pack_id could not be resolved")
 
-    scan_roots = [github["path"]] if github["kind"] == "tree" else COMMON_SKILL_DIRS
-    file_entries = []
     errors = []
-    for root in scan_roots:
-        try:
-            file_entries.extend(_github_collect_files(github["owner"], github["repo"], github["branch"], root.strip("/"), errors))
-        except Exception as exc:
-            errors.append({"path": root, "error": str(exc)})
+    try:
+        downloaded = _download_github_zip_files(github)
+    except Exception as exc:
+        return {
+            "ok": True,
+            "mode": "pack",
+            "pack_id": resolved_pack_id,
+            "installed_count": 0,
+            "failed_count": 1,
+            "installed_skills": [],
+            "errors": [{"path": str(url), "error": str(exc)}],
+        }
 
-    downloaded = {}
-    for entry in file_entries:
-        try:
-            downloaded[entry["path"]] = _download_text(entry["download_url"])
-        except Exception as exc:
-            errors.append({"path": entry.get("path"), "error": str(exc)})
-
-    skill_roots = _find_pack_skill_roots(downloaded)
+    scan_roots = [github["path"].strip("/")] if github["kind"] == "tree" else COMMON_SKILL_DIRS
+    scanned = _filter_downloaded_roots(downloaded, scan_roots)
+    skill_roots = _find_pack_skill_roots(scanned)
     installed_skills = []
     used_skill_ids = {skill.get("skill_id") for skill in list_skills().get("skills", [])}
     pack_dir = DEFAULT_IMPORTED_SKILLS_DIR / resolved_pack_id
     pack_dir.mkdir(parents=True, exist_ok=True)
 
     for root in skill_roots:
-        root_files = _files_for_skill_root(root, downloaded)
+        root_files = _files_for_skill_root(root, scanned)
         rel_slug = _safe_skill_id(root)
         skill_id = _unique_skill_id(f"{resolved_pack_id}_{rel_slug}", root, used_skill_ids)
         skill_path = "SKILL.md" if f"{root}/SKILL.md" in root_files else Path(root).name
@@ -97,8 +99,10 @@ def install_skill_pack(url, pack_id=None):
             target = pack_dir / rel_path
             target.parent.mkdir(parents=True, exist_ok=True)
             if rel_path == skill_path or rel_path.endswith("/SKILL.md") or rel_path == root:
-                content = _ensure_skill_id(content, skill_id)
-            target.write_text(content, encoding="utf-8")
+                text = _ensure_skill_id(_decode_text(content), skill_id)
+                target.write_text(text, encoding="utf-8")
+            else:
+                target.write_bytes(content)
         used_skill_ids.add(skill_id)
         final_skill_path = pack_dir / (f"{root}/SKILL.md" if f"{root}/SKILL.md" in root_files else root)
         meta, _body = _split_frontmatter(final_skill_path.read_text(encoding="utf-8"))
@@ -245,6 +249,37 @@ def _github_collect_files(owner, repo, branch, path, errors=None):
     return files
 
 
+def _download_github_zip_files(github):
+    url = f"https://api.github.com/repos/{github['owner']}/{github['repo']}/zipball/{quote(github['branch'])}"
+    response = requests.get(url, timeout=60)
+    response.raise_for_status()
+    files = {}
+    with zipfile.ZipFile(BytesIO(response.content)) as archive:
+        members = [name for name in archive.namelist() if not name.endswith("/")]
+        if not members:
+            return files
+        top_prefix = members[0].split("/", 1)[0] + "/"
+        for member in members:
+            if not member.startswith(top_prefix):
+                continue
+            rel_path = member[len(top_prefix) :]
+            if not rel_path:
+                continue
+            files[rel_path] = archive.read(member)
+    return files
+
+
+def _filter_downloaded_roots(downloaded, scan_roots):
+    normalized_roots = [root.strip("/") for root in scan_roots if root.strip("/")]
+    if not normalized_roots:
+        return dict(downloaded)
+    filtered = {}
+    for path, content in downloaded.items():
+        if any(path == root or path.startswith(f"{root}/") for root in normalized_roots):
+            filtered[path] = content
+    return filtered
+
+
 def _download_text(url):
     response = requests.get(url, timeout=20)
     response.raise_for_status()
@@ -261,7 +296,7 @@ def _find_pack_skill_roots(downloaded):
     roots = []
     for rel_path, content in downloaded.items():
         name = Path(rel_path).name.lower()
-        meta, _body = _split_frontmatter(content)
+        meta, _body = _split_frontmatter(_decode_text(content))
         if name == "skill.md":
             roots.append(str(Path(rel_path).parent).replace("\\", "/"))
         elif rel_path.lower().endswith(".md") and meta:
@@ -303,12 +338,13 @@ def _normalize_download_url(url):
 
 
 def _looks_like_markdown_skill(content):
-    text = str(content or "").lstrip()
+    text = _decode_text(content).lstrip()
     return text.startswith("---") or text.startswith("#")
 
 
 def _split_frontmatter(text):
-    if not str(text or "").startswith("---"):
+    text = _decode_text(text)
+    if not text.startswith("---"):
         return {}, text
     parts = text.split("---", 2)
     if len(parts) < 3:
@@ -331,6 +367,7 @@ def _split_frontmatter(text):
 
 
 def _ensure_skill_id(text, skill_id):
+    text = _decode_text(text)
     meta, body = _split_frontmatter(text)
     if not meta:
         return f"---\nskill_id: {skill_id}\nenabled: true\n---\n{text}"
@@ -340,6 +377,7 @@ def _ensure_skill_id(text, skill_id):
 
 
 def _set_frontmatter_value(text, key, value):
+    text = _decode_text(text)
     if not text.startswith("---"):
         return f"---\n{key}: {value}\n---\n{text}"
     parts = text.split("---", 2)
@@ -361,6 +399,12 @@ def _safe_skill_id(value):
     normalized = re.sub(r"[^A-Za-z0-9_-]+", "_", str(value or "").strip())
     normalized = re.sub(r"_+", "_", normalized).strip("._-")
     return normalized[:120]
+
+
+def _decode_text(value):
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value or "")
 
 
 def _stem_from_url(url):
