@@ -3,20 +3,27 @@
     <div class="panel-title">
       <div>
         <h2>Tasks</h2>
-        <small>{{ tasks.length }} tracked</small>
+        <small>{{ tasks.length }} tracked - scheduler {{ scheduler.running ? 'running' : 'stopped' }}</small>
       </div>
       <button @click="$emit('refresh')">Refresh</button>
     </div>
 
+    <div class="skill-actions">
+      <button v-if="scheduler.running" @click="$emit('scheduler-stop')">Stop Scheduler</button>
+      <button v-else @click="$emit('scheduler-start')">Start Scheduler</button>
+      <button :disabled="!scheduler.running" @click="$emit('scheduler-tick')">Tick</button>
+    </div>
+    <small v-if="scheduler.last_tick">Last tick {{ scheduler.last_tick }}</small>
+
     <ul v-if="tasks.length" class="compact-list">
       <li v-for="task in tasks" :key="task.task_id">
         <strong>{{ task.title }}</strong>
-        <small>{{ task.status }} · {{ task.task_id }}</small>
-        <small>{{ completedSteps(task) }}/{{ task.steps?.length || 0 }} steps · {{ task.artifacts?.length || 0 }} artifacts</small>
+        <small>{{ task.status }} - {{ task.task_id }}</small>
+        <small>{{ completedSteps(task) }}/{{ task.steps?.length || 0 }} steps - {{ task.artifacts?.length || 0 }} artifacts</small>
         <ol v-if="task.steps && task.steps.length" class="mini-steps">
           <li v-for="step in task.steps.slice(0, 4)" :key="step.step_id">
             <span>{{ step.status }}</span>
-            <small>{{ step.title }}<template v-if="step.attempts"> · try {{ step.attempts }}</template></small>
+            <small>{{ step.title }}<template v-if="step.attempts"> - try {{ step.attempts }}</template></small>
             <small v-if="step.last_error">{{ step.last_error }}</small>
             <button v-if="step.status === 'failed'" @click="$emit('retry-step', { task, step })">Retry</button>
           </li>
@@ -36,10 +43,22 @@
 
 <script setup>
 defineProps({
-  tasks: { type: Array, default: () => [] }
+  tasks: { type: Array, default: () => [] },
+  scheduler: { type: Object, default: () => ({ running: false, max_steps_per_tick: 1, last_tick: null }) }
 })
 
-defineEmits(['refresh', 'run-next', 'run-loop', 'pause', 'resume', 'cancel', 'retry-step'])
+defineEmits([
+  'refresh',
+  'scheduler-start',
+  'scheduler-stop',
+  'scheduler-tick',
+  'run-next',
+  'run-loop',
+  'pause',
+  'resume',
+  'cancel',
+  'retry-step'
+])
 
 function completedSteps(task) {
   return (task.steps || []).filter((step) => step.status === 'completed').length

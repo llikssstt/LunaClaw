@@ -104,6 +104,25 @@ export function fetchTasks() {
   return request('/tasks')
 }
 
+export function fetchTaskScheduler() {
+  return request('/tasks/scheduler')
+}
+
+export function startTaskScheduler(maxStepsPerTick = 1) {
+  return request('/tasks/scheduler/start', {
+    method: 'POST',
+    body: JSON.stringify({ max_steps_per_tick: maxStepsPerTick })
+  })
+}
+
+export function stopTaskScheduler() {
+  return request('/tasks/scheduler/stop', { method: 'POST' })
+}
+
+export function tickTaskScheduler() {
+  return request('/tasks/scheduler/tick', { method: 'POST' })
+}
+
 export function runTaskNext(taskId) {
   return request(`/tasks/${encodeURIComponent(taskId)}/run-next`, { method: 'POST' })
 }

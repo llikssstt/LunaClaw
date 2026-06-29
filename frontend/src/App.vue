@@ -26,7 +26,11 @@
       />
       <TaskPanel
         :tasks="tasks"
+        :scheduler="taskScheduler"
         @refresh="loadPanels"
+        @scheduler-start="handleStartTaskScheduler"
+        @scheduler-stop="handleStopTaskScheduler"
+        @scheduler-tick="handleTickTaskScheduler"
         @run-next="handleRunTaskNext"
         @run-loop="handleRunTaskLoop"
         @pause="handlePauseTask"
@@ -79,6 +83,7 @@ import {
   fetchEvolutionSkills,
   fetchMemory,
   fetchSkills,
+  fetchTaskScheduler,
   fetchTasks,
   fetchTodos,
   installSkill,
@@ -93,6 +98,9 @@ import {
   runTaskUntilIdle,
   searchTools,
   sendChat,
+  startTaskScheduler,
+  stopTaskScheduler,
+  tickTaskScheduler,
   uploadImage
 } from './api/chat'
 import AgentFlowPanel from './components/AgentFlowPanel.vue'
@@ -133,6 +141,7 @@ const installedSkills = ref([])
 const marketTools = ref([])
 const installedTools = ref([])
 const tasks = ref([])
+const taskScheduler = ref({ running: false, max_steps_per_tick: 1, last_tick: null })
 const agentFlow = ref([])
 const pendingApproval = ref(null)
 const loading = ref(false)
@@ -201,14 +210,15 @@ async function handleSend(payload) {
 
 async function loadPanels() {
   try {
-    const [memoryData, todoData, logData, evolutionSkillData, installedSkillData, toolData, taskData] = await Promise.all([
+    const [memoryData, todoData, logData, evolutionSkillData, installedSkillData, toolData, taskData, schedulerData] = await Promise.all([
       fetchMemory(),
       fetchTodos(),
       fetchEvolutionLogs(),
       fetchEvolutionSkills(),
       fetchSkills(),
       fetchTools(),
-      fetchTasks()
+      fetchTasks(),
+      fetchTaskScheduler()
     ])
     memories.value = memoryData
     todos.value = todoData
@@ -218,6 +228,7 @@ async function loadPanels() {
     marketTools.value = toolData.market || []
     installedTools.value = toolData.installed || []
     tasks.value = taskData.tasks || []
+    taskScheduler.value = schedulerData.scheduler || taskScheduler.value
   } catch {
     memories.value = memories.value
     todos.value = todos.value
@@ -225,6 +236,7 @@ async function loadPanels() {
     evolutionSkills.value = evolutionSkills.value
     installedSkills.value = installedSkills.value
     tasks.value = tasks.value
+    taskScheduler.value = taskScheduler.value
   }
 }
 
@@ -311,6 +323,21 @@ async function handleRunTaskNext(task) {
 
 async function handleRunTaskLoop(task) {
   await runTaskUntilIdle(task.task_id, 5)
+  await loadPanels()
+}
+
+async function handleStartTaskScheduler() {
+  await startTaskScheduler(1)
+  await loadPanels()
+}
+
+async function handleStopTaskScheduler() {
+  await stopTaskScheduler()
+  await loadPanels()
+}
+
+async function handleTickTaskScheduler() {
+  await tickTaskScheduler()
   await loadPanels()
 }
 

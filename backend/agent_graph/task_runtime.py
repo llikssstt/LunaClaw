@@ -1,4 +1,6 @@
 import json
+import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -7,6 +9,7 @@ from pathlib import Path
 TASK_STORE_PATH = Path(__file__).resolve().parents[1] / "storage" / "tasks.json"
 RUNNABLE_STATUSES = {"created", "running"}
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
+_store_lock = threading.RLock()
 
 
 def now_iso():
@@ -34,17 +37,20 @@ class TaskRuntime:
             "updated_at": now_iso(),
         }
         task["logs"].append({"timestamp": now_iso(), "event": "created", "message": task["title"]})
-        data = self._read()
-        data.setdefault("tasks", {})[task_id] = task
-        self._write(data)
+        with _store_lock:
+            data = self._read()
+            data.setdefault("tasks", {})[task_id] = task
+            self._write(data)
         return task
 
     def list_tasks(self):
-        tasks = list(self._read().get("tasks", {}).values())
+        with _store_lock:
+            tasks = list(self._read().get("tasks", {}).values())
         return sorted(tasks, key=lambda item: item.get("updated_at", ""), reverse=True)
 
     def get_task(self, task_id):
-        task = self._read().get("tasks", {}).get(task_id)
+        with _store_lock:
+            task = self._read().get("tasks", {}).get(task_id)
         if not task:
             raise KeyError(task_id)
         return task
@@ -169,14 +175,15 @@ class TaskRuntime:
         return self._mutate(task_id, mutate)
 
     def _mutate(self, task_id, mutator):
-        data = self._read()
-        task = data.setdefault("tasks", {}).get(task_id)
-        if not task:
-            raise KeyError(task_id)
-        mutator(task)
-        task["updated_at"] = now_iso()
-        self._write(data)
-        return task
+        with _store_lock:
+            data = self._read()
+            task = data.setdefault("tasks", {}).get(task_id)
+            if not task:
+                raise KeyError(task_id)
+            mutator(task)
+            task["updated_at"] = now_iso()
+            self._write(data)
+            return task
 
     def _read(self):
         try:
@@ -185,7 +192,17 @@ class TaskRuntime:
             return {"tasks": {}}
 
     def _write(self, data):
-        self.path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        tmp_path = self.path.with_name(f"{self.path.name}.{uuid.uuid4().hex}.tmp")
+        tmp_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        last_error = None
+        for _ in range(5):
+            try:
+                tmp_path.replace(self.path)
+                return
+            except PermissionError as exc:
+                last_error = exc
+                time.sleep(0.02)
+        raise last_error
 
 
 def _normalize_step(index, step):

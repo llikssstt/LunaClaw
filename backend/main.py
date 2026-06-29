@@ -93,6 +93,7 @@ class TaskRunRequest(BaseModel):
 
 class TaskSchedulerRequest(BaseModel):
     max_steps_per_tick: int = 1
+    tick_interval_seconds: float = 2.0
 
 
 @app.get("/health")
@@ -213,7 +214,7 @@ def task_scheduler_status():
 
 @app.post("/tasks/scheduler/start")
 def start_task_scheduler(request: TaskSchedulerRequest):
-    return {"ok": True, "scheduler": TaskScheduler().start(request.max_steps_per_tick)}
+    return {"ok": True, "scheduler": TaskScheduler().start(request.max_steps_per_tick, request.tick_interval_seconds)}
 
 
 @app.post("/tasks/scheduler/stop")

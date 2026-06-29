@@ -23,6 +23,7 @@ backend/storage/evolution_state.json
 backend/storage/installed_tools.json
 backend/storage/tool_approvals.json
 backend/storage/tasks.json
+backend/storage/task_scheduler.json
 backend/storage/uploads_index.json
 backend/storage/installed_tool_packages/
 backend/skills/imported/

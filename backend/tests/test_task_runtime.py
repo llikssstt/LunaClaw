@@ -1,4 +1,6 @@
 import uuid
+import time
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -52,6 +54,118 @@ def test_graphcore_returns_task_and_planner_fields(monkeypatch):
     assert result["task"]["steps"]
     assert result["planner_result"]["tool_intent"]["name"] == "calculator"
     assert any(step["agent_name"] == "Planner Agent" for step in result["agent_flow"])
+
+
+def test_graphcore_uses_llm_planner_json_for_task_and_tool_intent(monkeypatch):
+    tmp_path = local_tmp_path()
+    patch_task_store(monkeypatch, tmp_path)
+    from agent_graph.nodes import planner_node
+
+    calls = []
+
+    class FakeLLM:
+        def complete_json(self, prompt, stage, context):
+            calls.append({"prompt": prompt, "stage": stage, "context": context})
+            return json.dumps(
+                {
+                    "task_title": "Research current Python release",
+                    "route": "execute_tool",
+                    "reason": "Need fresh release information",
+                    "steps": [{"title": "Search current Python release"}, {"title": "Summarize result"}],
+                    "tool_intent": {"name": "web_search", "arguments": {"query": "latest Python release", "max_results": 3}},
+                }
+            )
+
+    def fake_execute(tool_call):
+        return {
+            "ok": True,
+            "tool": tool_call["name"],
+            "result": {"results": [{"title": "Python 3.x", "url": "https://python.org", "snippet": "release notes"}]},
+        }
+
+    monkeypatch.setattr(planner_node, "LLMClient", lambda: FakeLLM())
+    monkeypatch.setattr(tool_registry, "execute_tool", fake_execute)
+
+    result = GraphCore().chat("Find the latest Python release", "llm-planner")
+
+    assert calls
+    assert calls[0]["stage"] == "graph_planner"
+    assert "strict JSON" in calls[0]["prompt"]
+    assert result["planner_result"]["task_title"] == "Research current Python release"
+    assert result["planner_result"]["reason"] == "Need fresh release information"
+    assert result["planner_result"]["tool_intent"]["name"] == "web_search"
+    assert result["task"]["title"] == "Research current Python release"
+    assert result["task"]["steps"][0]["title"] == "Search current Python release"
+    assert any(entry["tool_call"]["name"] == "web_search" for entry in result["tool_trace"])
+
+
+def test_llm_planner_unknown_tool_routes_to_tool_search(monkeypatch):
+    tmp_path = local_tmp_path()
+    patch_task_store(monkeypatch, tmp_path)
+    from agent_graph.nodes import planner_node
+
+    class FakeLLM:
+        def complete_json(self, prompt, stage, context):
+            return json.dumps(
+                {
+                    "task_title": "Use unavailable tool",
+                    "route": "execute_tool",
+                    "reason": "LLM selected a tool that is not installed",
+                    "steps": [{"title": "Try unavailable tool"}],
+                    "tool_intent": {"name": "does_not_exist", "arguments": {"query": "x"}},
+                }
+            )
+
+    monkeypatch.setattr(planner_node, "LLMClient", lambda: FakeLLM())
+
+    result = GraphCore().chat("Use a special unavailable tool", "llm-unknown-tool")
+
+    assert result["planner_result"]["route"] == "tool_search"
+    assert result["planner_result"]["tool_intent"]["name"] == "none"
+    assert "does_not_exist" in result["planner_result"]["reason"]
+    assert not any(entry.get("tool_call", {}).get("name") == "does_not_exist" for entry in result["tool_trace"])
+
+
+def test_llm_planner_allows_enabled_installed_tool_intent(monkeypatch):
+    tmp_path = local_tmp_path()
+    patch_task_store(monkeypatch, tmp_path)
+    from agent_graph.nodes import planner_node
+    from agent_graph import tool_intent_runner
+
+    class FakeLLM:
+        def complete_json(self, prompt, stage, context):
+            return json.dumps(
+                {
+                    "task_title": "Read page using installed web reader",
+                    "route": "execute_tool",
+                    "reason": "Installed web_reader can fetch the page",
+                    "steps": [{"title": "Run installed web_reader"}],
+                    "tool_intent": {"name": "web_reader.fetch_page", "arguments": {"url": "https://example.com"}},
+                }
+            )
+
+    class FakeToolManager:
+        def list_installed_tools(self):
+            return [
+                {
+                    "tool_id": "web_reader",
+                    "enabled": True,
+                    "tools": [{"name": "fetch_page"}],
+                }
+            ]
+
+    def fake_run_tool_intent(tool_call):
+        return {"ok": True, "tool": tool_call["name"], "result": {"title": "Example", "url": "https://example.com", "content": "ok"}}
+
+    monkeypatch.setattr(planner_node, "LLMClient", lambda: FakeLLM())
+    monkeypatch.setattr(planner_node, "ToolManager", FakeToolManager)
+    monkeypatch.setattr(tool_intent_runner, "run_installed_tool", lambda tool_id, tool_name, args: fake_run_tool_intent({"name": f"{tool_id}.{tool_name}", "arguments": args}))
+
+    result = GraphCore().chat("Use web_reader on https://example.com", "llm-installed-tool")
+
+    assert result["planner_result"]["route"] == "execute_tool"
+    assert result["planner_result"]["tool_intent"]["name"] == "web_reader.fetch_page"
+    assert any(entry["tool_call"]["name"] == "web_reader.fetch_page" for entry in result["tool_trace"])
 
 
 def test_execution_node_uses_generic_tool_intent(monkeypatch):
@@ -303,3 +417,43 @@ def test_task_scheduler_tick_advances_runnable_tasks_only(monkeypatch):
     assert paused_after["steps"][0]["status"] == "pending"
     assert status_response.status_code == 200
     assert status_response.json()["scheduler"]["running"] is True
+
+
+def test_task_scheduler_background_worker_advances_tasks_without_manual_tick(monkeypatch):
+    tmp_path = local_tmp_path()
+    task_runtime = patch_task_store(monkeypatch, tmp_path)
+    calls = []
+
+    def fake_execute(tool_call):
+        calls.append(tool_call)
+        return {"ok": True, "tool": tool_call["name"], "result": {"attempt": len(calls)}}
+
+    monkeypatch.setattr(tool_registry, "execute_tool", fake_execute)
+    runtime = task_runtime.TaskRuntime()
+    task = runtime.create_task("Background scheduled task", session_id="scheduler-worker")
+    runtime.set_plan(
+        task["task_id"],
+        [{"title": "First background step"}, {"title": "Second background step"}],
+        {"name": "calculator", "arguments": {"expression": "2 + 3"}},
+    )
+    client = TestClient(app)
+
+    start_response = client.post("/tasks/scheduler/start", json={"max_steps_per_tick": 1, "tick_interval_seconds": 0.01})
+    deadline = time.time() + 2
+    completed_task = None
+    while time.time() < deadline:
+        current = client.get(f"/tasks/{task['task_id']}").json()
+        if current["status"] == "completed":
+            completed_task = current
+            break
+        time.sleep(0.02)
+    stop_response = client.post("/tasks/scheduler/stop")
+
+    assert start_response.status_code == 200
+    assert start_response.json()["scheduler"]["worker_running"] is True
+    assert completed_task is not None
+    assert completed_task["steps"][0]["status"] == "completed"
+    assert completed_task["steps"][1]["status"] == "completed"
+    assert len(calls) == 2
+    assert stop_response.status_code == 200
+    assert stop_response.json()["scheduler"]["running"] is False

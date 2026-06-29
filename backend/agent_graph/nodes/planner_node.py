@@ -1,7 +1,11 @@
+import json
 import re
 
+from agent.llm_client import LLMClient
 from agent_graph.nodes.common import flow_step
 from agent_graph.task_runtime import TaskRuntime
+from tool_system.manager import ToolManager
+from tools.registry import AVAILABLE_TOOLS, get_tool_names
 
 
 def planner_node(state):
@@ -24,6 +28,134 @@ def planner_node(state):
 
 
 def _plan(message, state):
+    llm_plan = _llm_plan(message, state)
+    if llm_plan:
+        return llm_plan
+    return _rule_plan(message, state)
+
+
+def _llm_plan(message, state):
+    prompt = _planner_prompt()
+    context = {
+        "message": message,
+        "route": state.get("route", "response"),
+        "input_type": state.get("input_type", "text"),
+        "attachments": state.get("attachments", []),
+        "available_tools": AVAILABLE_TOOLS,
+        "agent_flow": state.get("agent_flow", []),
+    }
+    try:
+        raw = LLMClient().complete_json(prompt, stage="graph_planner", context=context)
+        parsed = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return None
+    return _normalize_llm_plan(parsed)
+
+
+def _normalize_llm_plan(parsed):
+    if not isinstance(parsed, dict):
+        return None
+    task_title = str(parsed.get("task_title") or "").strip()
+    route = str(parsed.get("route") or "").strip()
+    steps = parsed.get("steps")
+    if not task_title or route not in {"response", "execute_tool", "tool_search", "multimodal"} or not isinstance(steps, list):
+        return None
+    normalized_steps = []
+    for index, step in enumerate(steps[:12], 1):
+        if isinstance(step, str):
+            title = step
+        elif isinstance(step, dict):
+            title = step.get("title") or step.get("description") or f"Step {index}"
+        else:
+            title = f"Step {index}"
+        normalized_steps.append({"title": str(title)[:240]})
+    if not normalized_steps:
+        return None
+    tool_intent = parsed.get("tool_intent") or {"name": "none", "arguments": {}}
+    if not isinstance(tool_intent, dict):
+        tool_intent = {"name": "none", "arguments": {}}
+    tool_intent = {
+        "name": str(tool_intent.get("name") or "none"),
+        "arguments": tool_intent.get("arguments") if isinstance(tool_intent.get("arguments"), dict) else {},
+    }
+    if route != "execute_tool":
+        tool_intent = {"name": "none", "arguments": {}}
+    elif not _is_allowed_tool_intent(tool_intent):
+        return _result(
+            task_title,
+            "tool_search",
+            f"Planner selected unavailable tool: {tool_intent.get('name')}",
+            normalized_steps,
+            {"name": "none", "arguments": {}},
+        )
+    return _result(
+        task_title,
+        route,
+        str(parsed.get("reason") or "LLM structured plan")[:500],
+        normalized_steps,
+        tool_intent,
+    )
+
+
+def _planner_prompt():
+    installed_tools = _installed_tool_schemas()
+    return (
+        "You are LunaClaw's graph planner. Return strict JSON only.\n"
+        "Plan the user request as a durable task for an autonomous Agent Runtime.\n"
+        "Required JSON schema:\n"
+        "{\n"
+        '  "task_title": "short task title",\n'
+        '  "route": "response | execute_tool | tool_search | multimodal",\n'
+        '  "reason": "why this route and plan were chosen",\n'
+        '  "steps": [{"title": "durable step title"}],\n'
+        '  "tool_intent": {"name": "tool name or none", "arguments": {}}\n'
+        "}\n"
+        "Use route=execute_tool only when a tool should run now. Use route=tool_search only for explicit tool discovery/install needs. "
+        "Use route=multimodal for image attachments. Otherwise use response. "
+        f"Available built-in tools: {json.dumps(AVAILABLE_TOOLS, ensure_ascii=False)}\n"
+        f"Enabled installed tools: {json.dumps(installed_tools, ensure_ascii=False)}"
+    )
+
+
+def _is_allowed_tool_intent(tool_intent):
+    name = (tool_intent or {}).get("name", "none")
+    if not name or name == "none":
+        return True
+    if "." not in name:
+        return name in set(get_tool_names())
+    tool_id, function_name = name.split(".", 1)
+    for tool in ToolManager().list_installed_tools():
+        if tool.get("tool_id") != tool_id or tool.get("enabled") is False:
+            continue
+        for spec in tool.get("tools", []):
+            if spec.get("name") == function_name:
+                return True
+    return False
+
+
+def _installed_tool_schemas():
+    schemas = []
+    try:
+        installed = ToolManager().list_installed_tools()
+    except Exception:
+        return schemas
+    for tool in installed:
+        if tool.get("enabled") is False:
+            continue
+        for spec in tool.get("tools", []):
+            name = spec.get("name")
+            if name:
+                schemas.append(
+                    {
+                        "name": f"{tool.get('tool_id')}.{name}",
+                        "description": spec.get("description") or tool.get("description", ""),
+                        "arguments": spec.get("input_schema") or spec.get("arguments", {}),
+                    }
+                )
+    return schemas
+
+
+def _rule_plan(message, state):
     if state.get("route") == "multimodal":
         return _result("Analyze uploaded image", "multimodal", "image attachment detected", [{"title": "Analyze image input"}])
     lower = str(message or "").lower()
